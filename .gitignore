@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.env
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+
+# Docker
+*.log
+.env
+
+# VSCode
+.vscode/
+
+# React build
+frontend/build/
+frontend/dist/
+
+# Python virtualenv
+venv/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Misc
+*.sqlite3
