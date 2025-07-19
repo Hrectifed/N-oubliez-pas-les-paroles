@@ -1,25 +1,57 @@
 import React, { useState } from 'react';
 import { addSong, getCategories, createGame } from './api';
+import LyricsSelector from './LyricsSelector';
+import { parseLRC } from './lrcUtils';
 
 function CreateGame({ onGameCreated }) {
   const [step, setStep] = useState(1);
   const [songs, setSongs] = useState([]);
-  const [song, setSong] = useState({ title: '', category: '', youtube_url: '', lyrics: '', hidden_indices: '' });
+  const [song, setSong] = useState({ title: '', category: '', youtube_url: '', spotify_id: '', lrc: '', hidden_line_indices: [] });
+  const [lrcLines, setLrcLines] = useState([]);
+  const [fetchingLrc, setFetchingLrc] = useState(false);
   const [players, setPlayers] = useState(['']);
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState('');
 
   // Add song step
-  const handleAddSong = async () => {
-    if (!song.title || !song.category || !song.youtube_url || !song.lyrics || !song.hidden_indices) {
-      setError('Tous les champs sont requis.');
+  const handleFetchLrc = async () => {
+    if (!song.spotify_id) {
+      setError('Spotify ID requis');
       return;
     }
-    const lyricsArr = song.lyrics.split('\n');
-    const hiddenArr = song.hidden_indices.split(',').map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x));
-    const newSong = await addSong({ ...song, lyrics: lyricsArr, hidden_indices: hiddenArr });
+    setFetchingLrc(true);
+    setError('');
+    try {
+      // Change port as needed
+      const res = await fetch(`http://localhost:PORT/v1/lyrics/${song.spotify_id}`);
+      if (!res.ok) throw new Error('LRC introuvable');
+      const data = await res.json();
+      setSong(s => ({ ...s, lrc: data.lrc }));
+      setLrcLines(parseLRC(data.lrc));
+    } catch (e) {
+      setError('Erreur lors de la récupération du LRC');
+    }
+    setFetchingLrc(false);
+  };
+
+  const handleToggleHidden = idx => {
+    setSong(s => {
+      const arr = s.hidden_line_indices.includes(idx)
+        ? s.hidden_line_indices.filter(i => i !== idx)
+        : [...s.hidden_line_indices, idx];
+      return { ...s, hidden_line_indices: arr };
+    });
+  };
+
+  const handleAddSong = async () => {
+    if (!song.title || !song.category || !song.youtube_url || !song.spotify_id || !song.lrc || song.hidden_line_indices.length === 0) {
+      setError('Tous les champs sont requis et au moins une ligne cachée.');
+      return;
+    }
+    const newSong = await addSong(song);
     setSongs([...songs, newSong]);
-    setSong({ title: '', category: '', youtube_url: '', lyrics: '', hidden_indices: '' });
+    setSong({ title: '', category: '', youtube_url: '', spotify_id: '', lrc: '', hidden_line_indices: [] });
+    setLrcLines([]);
     setError('');
     setStep(1);
   };
@@ -54,8 +86,14 @@ function CreateGame({ onGameCreated }) {
           <input placeholder="Titre" value={song.title} onChange={e => setSong({ ...song, title: e.target.value })} />
           <input placeholder="Catégorie" value={song.category} onChange={e => setSong({ ...song, category: e.target.value })} />
           <input placeholder="URL Youtube" value={song.youtube_url} onChange={e => setSong({ ...song, youtube_url: e.target.value })} />
-          <textarea placeholder="Paroles (une ligne par ligne)" value={song.lyrics} onChange={e => setSong({ ...song, lyrics: e.target.value })} />
-          <input placeholder="Indices à cacher (ex: 2,5)" value={song.hidden_indices} onChange={e => setSong({ ...song, hidden_indices: e.target.value })} />
+          <input placeholder="Spotify ID (ex: 5K1m4aaPCxwnm9SKlWW1vh)" value={song.spotify_id} onChange={e => setSong({ ...song, spotify_id: e.target.value })} />
+          <button onClick={handleFetchLrc} disabled={fetchingLrc}>Récupérer les paroles (LRC)</button>
+          {lrcLines.length > 0 && (
+            <div style={{ margin: '16px 0' }}>
+              <h4>Sélectionnez les lignes à cacher :</h4>
+              <LyricsSelector lines={lrcLines} selected={song.hidden_line_indices} onToggle={handleToggleHidden} />
+            </div>
+          )}
           <button onClick={handleAddSong}>Ajouter la chanson</button>
           <button onClick={() => setStep(2)} style={{ marginLeft: 10 }}>Suivant</button>
           {error && <div style={{ color: 'red' }}>{error}</div>}
