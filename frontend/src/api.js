@@ -52,11 +52,11 @@ export async function selectSong(gameId, songId) {
   return res.json();
 }
 
-export async function attemptLyrics(gameId, songId, attempt, player) {
+export async function attemptLyrics(gameId, songId, wordAttempts, player) {
   const res = await fetch(`${API_URL}/games/${gameId}/attempt_lyrics`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ song_id: songId, attempt, player })
+    body: JSON.stringify({ song_id: songId, attempt: wordAttempts, player })
   });
   return res.json();
 }
