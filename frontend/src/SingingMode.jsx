@@ -32,7 +32,21 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     hiddenLines.forEach((line, lineIdx) => {
       if (line && line.text) {
         if (startTime === null) startTime = line.time;
-        endTime = line.time + 5000; // Assume 5 seconds per line if no next line
+        
+        // Calculate end time based on next line or assume 4 seconds per line
+        const nextLineIndex = song.hidden_line_indices[lineIdx + 1];
+        if (nextLineIndex && song.lyrics[nextLineIndex]) {
+          endTime = song.lyrics[nextLineIndex].time;
+        } else {
+          // For the last hidden line, look for the next non-hidden line
+          const currentIndex = song.hidden_line_indices[lineIdx];
+          const nextLyric = song.lyrics[currentIndex + 1];
+          if (nextLyric) {
+            endTime = nextLyric.time;
+          } else {
+            endTime = line.time + 4000; // 4 seconds fallback
+          }
+        }
 
         const words = line.text.match(/\b\w+\b/g) || [];
         words.forEach(word => {
