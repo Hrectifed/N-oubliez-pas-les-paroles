@@ -33,6 +33,7 @@ class Player(BaseModel):
 
 class Game(BaseModel):
     id: int
+    name: str
     players: List[Player]
     categories: List[str]
     played_categories: List[str]
@@ -86,6 +87,7 @@ def get_songs_by_category(category_name: str):
 
 # --- Game Management ---
 class GameCreate(BaseModel):
+    name: str
     player_names: List[str]
 
 @app.post("/games", response_model=Game)
@@ -98,6 +100,7 @@ def create_game(game: GameCreate):
     players = [Player(username=name) for name in game.player_names]
     game_obj = Game(
         id=game_id,
+        name=game.name,
         players=players,
         categories=list(categories.keys()),
         played_categories=[],
@@ -108,6 +111,17 @@ def create_game(game: GameCreate):
     )
     games[game_id] = game_obj
     return game_obj
+
+# List all games with id, name, and state (for filtering playable games)
+
+class GameSummary(BaseModel):
+    id: int
+    name: str
+    state: str
+
+@app.get("/games", response_model=List[GameSummary])
+def list_games():
+    return [GameSummary(id=g.id, name=g.name, state=g.state) for g in games.values()]
 
 @app.get("/games/{game_id}", response_model=Game)
 def get_game(game_id: int):
