@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import random
+import re
 
 
 app = FastAPI()
@@ -14,6 +15,25 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# Utility function to parse LRC content
+def parse_lrc(lrc_content: str):
+    """Parse LRC content into array of {time, text} objects"""
+    lines = lrc_content.split('\n')
+    result = []
+    time_exp = re.compile(r'\[(\d+):(\d+)(?:\.(\d+))?\]')
+    
+    for line in lines:
+        match = time_exp.match(line)
+        if match:
+            min_val = int(match.group(1))
+            sec_val = int(match.group(2))
+            ms_val = int(match.group(3).ljust(3, '0')[:3]) if match.group(3) else 0
+            time_ms = min_val * 60 * 1000 + sec_val * 1000 + ms_val
+            text = time_exp.sub('', line).strip()
+            result.append({"time": time_ms, "text": text})
+    
+    return result
+
 # Data models
 class Song(BaseModel):
     id: int
@@ -22,6 +42,7 @@ class Song(BaseModel):
     youtube_url: str
     spotify_id: str
     lrc: str  # LRC file content as string
+    lyrics: List[Dict]  # Parsed lyrics with timing
     hidden_line_indices: List[int]  # Indices of lines to hide
 
 class Category(BaseModel):
@@ -63,7 +84,8 @@ def add_song(song: SongCreate):
     global song_counter
     song_id = song_counter
     song_counter += 1
-    new_song = Song(id=song_id, **song.dict())
+    lyrics = parse_lrc(song.lrc)
+    new_song = Song(id=song_id, lyrics=lyrics, **song.dict())
     songs[song_id] = new_song
     # Add to category
     if song.category not in categories:
@@ -190,7 +212,7 @@ def select_song(game_id: int, selection: SongSelection):
 
 class LyricsAttempt(BaseModel):
     song_id: int
-    attempt: str  # The guessed lyric
+    attempt: List[str]  # Array of guessed words
     player: str
 
 @app.post("/games/{game_id}/attempt_lyrics")
@@ -199,21 +221,48 @@ def attempt_lyrics(game_id: int, attempt: LyricsAttempt):
         raise HTTPException(status_code=404, detail="Game not found")
     if attempt.song_id not in songs:
         raise HTTPException(status_code=404, detail="Song not found")
+    
     song = songs[attempt.song_id]
-    # For now, check only the first hidden line
     if not song.hidden_line_indices:
-        return {"correct": False, "expected": []}
-    idx = song.hidden_line_indices[0]
-    # Parse LRC to get the expected lyric
-    lrc_lines = [line for line in song.lrc.splitlines() if line.strip() and line.strip()[0] == '[' and ']' in line]
-    def parse_lrc_line(line):
-        try:
-            ts, text = line.split(']', 1)
-            return text.strip()
-        except:
-            return ''
-    expected = parse_lrc_line(lrc_lines[idx]) if idx < len(lrc_lines) else ''
-    correct = attempt.attempt.strip().lower() == expected.strip().lower()
-    if correct:
-        games[game_id].scores[attempt.player] += 1
-    return {"correct": correct, "expected": [expected]}
+        return {"correct": False, "expected": [], "word_results": []}
+    
+    # Get all hidden lines and their words
+    expected_words = []
+    hidden_texts = []
+    
+    for idx in song.hidden_line_indices:
+        if idx < len(song.lyrics):
+            hidden_text = song.lyrics[idx]["text"]
+            hidden_texts.append(hidden_text)
+            # Split into words, removing punctuation for comparison
+            words = re.findall(r'\b\w+\b', hidden_text.lower())
+            expected_words.extend(words)
+    
+    # Compare word by word
+    word_results = []
+    correct_count = 0
+    
+    for i, (expected, attempted) in enumerate(zip(expected_words, attempt.attempt)):
+        is_correct = expected.lower().strip() == attempted.lower().strip()
+        word_results.append({
+            "word": expected,
+            "attempt": attempted,
+            "correct": is_correct
+        })
+        if is_correct:
+            correct_count += 1
+    
+    # Add score based on percentage of correct words
+    total_words = len(expected_words)
+    score = 0
+    if total_words > 0:
+        score = int((correct_count / total_words) * 100)
+        if score >= 80:  # 80% threshold for points
+            games[game_id].scores[attempt.player] += score // 10
+    
+    return {
+        "correct": correct_count == total_words,
+        "expected": hidden_texts,
+        "word_results": word_results,
+        "score": score
+    }

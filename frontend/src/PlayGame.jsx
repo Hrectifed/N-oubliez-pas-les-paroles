@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getGame, startGame, selectCategory, selectSong, attemptLyrics, getCategories } from './api';
+import SingingMode from './SingingMode';
 
 function PlayGame({ gameId, onBack }) {
   const [game, setGame] = useState(null);
@@ -47,14 +48,14 @@ function PlayGame({ gameId, onBack }) {
   const handleSelectSong = async songId => {
     const s = songs.find(s => s.id === songId);
     setSong(s);
-    setAttempt(Array(s.hidden_indices?.length || 0).fill(''));
     setStep('sing');
   };
 
-  const handleAttempt = async () => {
-    const res = await attemptLyrics(gameId, song.id, attempt, game.current_player);
+  const handleAttemptSubmit = async (wordAttempts) => {
+    const res = await attemptLyrics(gameId, song.id, wordAttempts, game.current_player);
     setResult(res);
     setStep('result');
+    return res;
   };
 
   if (!game) return <div style={{ textAlign: 'center', marginTop: 40 }}>Chargement...</div>;
@@ -92,31 +93,86 @@ function PlayGame({ gameId, onBack }) {
         </div>
       )}
       {step === 'sing' && song && (
-        <div>
-          <h3>{song.title}</h3>
-          <div>
-            <iframe width="400" height="225" src={song.youtube_url.replace('watch?v=', 'embed/')} title="YouTube video" frameBorder="0" allowFullScreen></iframe>
-          </div>
-          <div style={{ marginTop: 20 }}>
-            {song.lyrics?.map((line, idx) => (
-              song.hidden_indices?.includes(idx)
-                ? <input key={idx} value={attempt[song.hidden_indices.indexOf(idx)] || ''} onChange={e => {
-                    const arr = [...attempt];
-                    arr[song.hidden_indices.indexOf(idx)] = e.target.value;
-                    setAttempt(arr);
-                  }} style={{ width: 200, margin: 2 }} />
-                : <div key={idx}>{line}</div>
-            )) || <div>Paroles non disponibles</div>}
-          </div>
-          <button onClick={handleAttempt}>Valider</button>
-        </div>
+        <SingingMode 
+          song={song}
+          onAttemptSubmit={handleAttemptSubmit}
+          onBack={() => setStep('song')}
+        />
       )}
       {step === 'result' && result && (
         <div>
           <h3>Résultat</h3>
-          {result.correct ? <div style={{ color: 'green' }}>Bonne réponse !</div> : <div style={{ color: 'red' }}>Mauvaise réponse.</div>}
-          <div>Réponse attendue : {result.expected.join(' / ')}</div>
-          <button onClick={() => setStep('category')}>Prochain tour</button>
+          {result.correct ? (
+            <div style={{ color: 'green', fontSize: '18px', margin: '20px 0' }}>
+              🎉 Parfait ! Toutes les paroles sont correctes !
+            </div>
+          ) : (
+            <div style={{ color: 'red', fontSize: '18px', margin: '20px 0' }}>
+              ❌ Quelques erreurs...
+            </div>
+          )}
+          
+          {result.word_results && result.word_results.length > 0 && (
+            <div style={{ margin: '20px 0' }}>
+              <h4>Détail des mots :</h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {result.word_results.map((wordResult, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      backgroundColor: wordResult.correct ? '#c8e6c9' : '#ffcdd2',
+                      border: `2px solid ${wordResult.correct ? '#4caf50' : '#f44336'}`,
+                      margin: '2px'
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold' }}>
+                      {wordResult.correct ? '✓' : '✗'} {wordResult.word}
+                    </div>
+                    {!wordResult.correct && (
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        Votre réponse: "{wordResult.attempt}"
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ margin: '20px 0' }}>
+            <strong>Paroles attendues :</strong>
+            <div style={{ fontStyle: 'italic', margin: '10px 0' }}>
+              {result.expected.join(' ')}
+            </div>
+          </div>
+
+          {result.score && (
+            <div style={{ 
+              background: '#e3f2fd', 
+              padding: '10px', 
+              borderRadius: '4px',
+              margin: '20px 0' 
+            }}>
+              Score obtenu: {result.score}/100
+            </div>
+          )}
+
+          <button 
+            onClick={() => setStep('category')}
+            style={{ 
+              padding: '12px 24px',
+              backgroundColor: '#2196f3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            Prochain tour
+          </button>
         </div>
       )}
     </div>
