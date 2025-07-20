@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import TitleScreen from './TitleScreen';
 import CreateGame from './CreateGame';
+import GameSelector from './GameSelector';
 import PlayGame from './PlayGame';
 
 function App() {
@@ -10,13 +11,23 @@ function App() {
   return (
     <div>
       {screen === 'title' && (
-        <TitleScreen onCreate={() => setScreen('create')} onPlay={() => setScreen('play')} />
+        <TitleScreen 
+          onCreate={() => setScreen('create')} 
+          onPlay={() => setScreen('select')} 
+        />
       )}
       {screen === 'create' && (
         <CreateGame onGameCreated={id => { setGameId(id); setScreen('play'); }} />
       )}
+      {screen === 'select' && (
+        <GameSelector 
+          onGameSelected={id => { setGameId(id); setScreen('play'); }}
+          onBack={() => setScreen('title')}
+          title="Jouer une partie"
+        />
+      )}
       {screen === 'play' && (
-        <PlayGame gameId={gameId} />
+        <PlayGame gameId={gameId} onBack={() => setScreen('title')} />
       )}
     </div>
   );
