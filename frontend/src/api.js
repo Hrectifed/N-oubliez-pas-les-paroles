@@ -5,6 +5,11 @@ export async function getGame(gameId) {
   return res.json();
 }
 
+export async function getGames() {
+  const res = await fetch(`${API_URL}/games`);
+  return res.json();
+}
+
 export async function getCategories() {
   const res = await fetch(`${API_URL}/categories`);
   return res.json();
@@ -15,11 +20,11 @@ export async function getSongsByCategory(category) {
   return res.json();
 }
 
-export async function createGame(playerNames) {
+export async function createGame(gameData) {
   const res = await fetch(`${API_URL}/games`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_names: playerNames })
+    body: JSON.stringify(gameData)
   });
   return res.json();
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { addSong, getCategories, createGame } from './api';
 import LyricsSelector from './LyricsSelector';
+import GameSelector from './GameSelector';
 import { parseLRC } from './lrcUtils';
 
 function CreateGame({ onGameCreated }) {
@@ -13,8 +14,6 @@ function CreateGame({ onGameCreated }) {
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState('');
   const [gameName, setGameName] = useState('');
-  const [games, setGames] = useState([]);
-  const [selectedGameId, setSelectedGameId] = useState('');
 
   // Add song step
   const handleFetchLrc = async () => {
@@ -90,16 +89,6 @@ function CreateGame({ onGameCreated }) {
     setPlayers(arr);
   };
 
-  // Fetch available games for selection
-  useEffect(() => {
-    if (step === 3) {
-      fetch('/games')
-        .then(res => res.json())
-        .then(data => setGames(data))
-        .catch(() => setGames([]));
-    }
-  }, [step]);
-
   const handleCreateGame = async () => {
     const filtered = players.map(p => p.trim()).filter(Boolean);
     if (!gameName.trim()) {
@@ -118,12 +107,8 @@ function CreateGame({ onGameCreated }) {
     // Optionally, you can call onGameCreated(game.id) here if you want to auto-start
   };
 
-  const handleStartSelectedGame = () => {
-    if (!selectedGameId) {
-      setError('Sélectionnez une partie à démarrer.');
-      return;
-    }
-    onGameCreated(selectedGameId);
+  const handleGameSelected = (gameId) => {
+    onGameCreated(gameId);
   };
 
   return (
@@ -168,18 +153,11 @@ function CreateGame({ onGameCreated }) {
         </div>
       )}
       {step === 3 && (
-        <div>
-          <h3>Sélectionner une partie à démarrer</h3>
-          <select value={selectedGameId} onChange={e => setSelectedGameId(e.target.value)}>
-            <option value="">-- Choisir une partie --</option>
-            {games.filter(g => g.state === 'waiting').map(g => (
-              <option key={g.id} value={g.id}>{g.name} (id: {g.id})</option>
-            ))}
-          </select>
-          <button onClick={handleStartSelectedGame} style={{ marginLeft: 10 }}>Démarrer</button>
-          <button onClick={() => setStep(2)} style={{ marginLeft: 10 }}>Retour</button>
-          {error && <div style={{ color: 'red' }}>{error}</div>}
-        </div>
+        <GameSelector 
+          onGameSelected={handleGameSelected}
+          onBack={() => setStep(2)}
+          title="Sélectionner une partie à démarrer"
+        />
       )}
       <div style={{ marginTop: 20 }}>
         <h4>Chansons ajoutées:</h4>
