@@ -1,9 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import random
 import re
+import json
 
 
 app = FastAPI()
@@ -584,6 +586,20 @@ class LyricsAttempt(BaseModel):
     attempt: List[str]  # Array of guessed words
     player: str
 
+class ExportData(BaseModel):
+    games: Dict[int, Any]
+    global_songs: Dict[int, Any] 
+    global_categories: Dict[str, Any]
+    song_counter: int
+    game_counter: int
+
+class ImportData(BaseModel):
+    games: Optional[Dict[int, Any]] = None
+    global_songs: Optional[Dict[int, Any]] = None
+    global_categories: Optional[Dict[str, Any]] = None
+    song_counter: Optional[int] = None
+    game_counter: Optional[int] = None
+
 @app.post("/games/{game_id}/attempt_lyrics")
 def attempt_lyrics(game_id: int, attempt: LyricsAttempt):
     if game_id not in games:
@@ -636,3 +652,129 @@ def attempt_lyrics(game_id: int, attempt: LyricsAttempt):
         "word_results": word_results,
         "score": score
     }
+
+# --- Export/Import functionality ---
+@app.get("/export", response_model=ExportData)
+def export_all_data():
+    """Export all application data to JSON format"""
+    # Convert games to exportable format
+    games_export = {}
+    for game_id, game in games.items():
+        games_export[game_id] = {
+            "id": game.id,
+            "name": game.name,
+            "players": [{"username": p.username, "picture_url": p.picture_url} for p in game.players],
+            "songs": {str(k): {
+                "id": v.id,
+                "title": v.title,
+                "category": v.category,
+                "youtube_url": v.youtube_url,
+                "spotify_id": v.spotify_id,
+                "lrc": v.lrc,
+                "lyrics": v.lyrics,
+                "hidden_line_indices": v.hidden_line_indices
+            } for k, v in game.songs.items()},
+            "categories": {name: {
+                "name": category.name,
+                "song_ids": category.song_ids
+            } for name, category in game.categories.items()},
+            "played_categories": game.played_categories,
+            "current_round": game.current_round,
+            "current_player": game.current_player,
+            "players_played_this_round": game.players_played_this_round,
+            "state": game.state,
+            "scores": game.scores
+        }
+    
+    # Convert global songs to exportable format
+    songs_export = {str(k): {
+        "id": v.id,
+        "title": v.title,
+        "category": v.category,
+        "youtube_url": v.youtube_url,
+        "spotify_id": v.spotify_id,
+        "lrc": v.lrc,
+        "lyrics": v.lyrics,
+        "hidden_line_indices": v.hidden_line_indices
+    } for k, v in songs.items()}
+    
+    # Convert global categories to exportable format
+    categories_export = {name: {
+        "name": category.name,
+        "song_ids": category.song_ids
+    } for name, category in categories.items()}
+    
+    return ExportData(
+        games=games_export,
+        global_songs=songs_export,
+        global_categories=categories_export,
+        song_counter=song_counter,
+        game_counter=game_counter
+    )
+
+@app.post("/import")
+def import_all_data(import_data: ImportData):
+    """Import data from JSON format, replacing existing data"""
+    global songs, categories, games, song_counter, game_counter
+    
+    try:
+        # Import global songs
+        if import_data.global_songs is not None:
+            songs.clear()
+            for song_id_str, song_data in import_data.global_songs.items():
+                song_id = int(song_id_str)
+                new_song = Song(**song_data)
+                songs[song_id] = new_song
+        
+        # Import global categories
+        if import_data.global_categories is not None:
+            categories.clear()
+            for cat_name, cat_data in import_data.global_categories.items():
+                categories[cat_name] = Category(**cat_data)
+        
+        # Import games
+        if import_data.games is not None:
+            games.clear()
+            for game_id_str, game_data in import_data.games.items():
+                game_id = int(game_id_str)
+                
+                # Convert players from dict to Player objects
+                players = [Player(**p) for p in game_data["players"]]
+                
+                # Convert songs from dict to Song objects
+                game_songs = {}
+                for song_id_str, song_data in game_data["songs"].items():
+                    song_id = int(song_id_str)
+                    game_songs[song_id] = Song(**song_data)
+                
+                # Convert categories from dict to Category objects
+                game_categories = {}
+                for cat_name, cat_data in game_data["categories"].items():
+                    game_categories[cat_name] = Category(**cat_data)
+                
+                # Create game object
+                game = Game(
+                    id=game_id,
+                    name=game_data["name"],
+                    players=players,
+                    songs=game_songs,
+                    categories=game_categories,
+                    played_categories=game_data["played_categories"],
+                    current_round=game_data["current_round"],
+                    current_player=game_data["current_player"],
+                    players_played_this_round=game_data["players_played_this_round"],
+                    state=game_data["state"],
+                    scores=game_data["scores"]
+                )
+                games[game_id] = game
+        
+        # Update counters
+        if import_data.song_counter is not None:
+            song_counter = import_data.song_counter
+        if import_data.game_counter is not None:
+            game_counter = import_data.game_counter
+            
+        return {"message": "Data imported successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
