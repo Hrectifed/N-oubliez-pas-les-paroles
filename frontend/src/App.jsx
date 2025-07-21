@@ -10,12 +10,11 @@ function App() {
   const [gameId, setGameId] = useState(null);
 
   return (
-    <div>
+    <div style={{ minHeight: '100vh' }}>
       {screen === 'title' && (
         <TitleScreen 
           onCreate={() => setScreen('create')} 
           onPlay={() => setScreen('select')}
-          onManageSongs={() => setScreen('songs')}
         />
       )}
       {screen === 'create' && (
@@ -26,12 +25,6 @@ function App() {
           onGameSelected={id => { setGameId(id); setScreen('play'); }}
           onBack={() => setScreen('title')}
           title="Jouer une partie"
-        />
-      )}
-      {screen === 'songs' && (
-        <SongManager 
-          onSongAdded={() => setScreen('title')} 
-          onBack={() => setScreen('title')}
         />
       )}
       {screen === 'play' && (
