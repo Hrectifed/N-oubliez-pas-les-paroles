@@ -106,6 +106,17 @@ button:disabled {
   background: var(--error-hover);
 }
 
+.btn-outline-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 2px solid var(--border-color);
+}
+
+.btn-outline-secondary:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
 /* Modern Input Styles */
 input, textarea, select {
   font-family: inherit;

@@ -172,3 +172,18 @@ export async function completeCategory(gameId, category) {
   });
   return res.json();
 }
+
+// Export/Import functions
+export async function exportData() {
+  const res = await fetch(`${API_URL}/export`);
+  return res.json();
+}
+
+export async function importData(data) {
+  const res = await fetch(`${API_URL}/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}

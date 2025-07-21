@@ -1,6 +1,46 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { exportData, importData } from './api';
 
 function TitleScreen({ onCreate, onPlay }) {
+  const fileInputRef = useRef(null);
+
+  const handleExport = async () => {
+    try {
+      const data = await exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `retenez-les-paroles-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Erreur lors de l\'export: ' + error.message);
+    }
+  };
+
+  const handleImport = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await importData(data);
+      alert('Données importées avec succès!');
+      // Reset file input
+      event.target.value = '';
+    } catch (error) {
+      alert('Erreur lors de l\'import: ' + error.message);
+      event.target.value = '';
+    }
+  };
   return (
     <div className="container text-center" style={{ marginTop: '60px' }}>
       <div className="card" style={{ 
@@ -46,6 +86,41 @@ function TitleScreen({ onCreate, onPlay }) {
               ▶️ Jouer une partie
             </button>
           </div>
+          
+          <hr style={{ margin: '2rem 0', border: '1px solid #eee' }} />
+          
+          <div className="flex gap-3 justify-center" style={{ flexWrap: 'wrap' }}>
+            <button 
+              onClick={handleExport} 
+              className="btn-outline-secondary"
+              style={{ 
+                fontSize: '1rem',
+                padding: '12px 24px',
+                minWidth: '140px'
+              }}
+            >
+              📤 Exporter
+            </button>
+            <button 
+              onClick={handleImport} 
+              className="btn-outline-secondary"
+              style={{ 
+                fontSize: '1rem',
+                padding: '12px 24px',
+                minWidth: '140px'
+              }}
+            >
+              📥 Importer
+            </button>
+          </div>
+          
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".json"
+            style={{ display: 'none' }}
+          />
         </div>
       </div>
     </div>
