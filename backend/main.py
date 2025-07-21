@@ -75,6 +75,7 @@ class Game(BaseModel):
     played_categories: List[str]
     current_round: int
     current_player: Optional[str]
+    players_played_this_round: List[str]  # Track who has played in current round
     state: str  # 'waiting', 'playing', 'finished'
     scores: Dict[str, int]
 
@@ -393,6 +394,7 @@ def create_game(game: GameCreate):
         played_categories=[],
         current_round=0,
         current_player=None,
+        players_played_this_round=[],
         state="waiting",
         scores={name: 0 for name in game.player_names}
     )
@@ -424,6 +426,7 @@ def create_game(game: GameCreate):
         "played_categories": game_obj.played_categories,
         "current_round": game_obj.current_round,
         "current_player": game_obj.current_player,
+        "players_played_this_round": game_obj.players_played_this_round,
         "state": game_obj.state,
         "scores": game_obj.scores
     }
@@ -473,6 +476,7 @@ def get_game(game_id: int):
         "played_categories": game.played_categories,
         "current_round": game.current_round,
         "current_player": game.current_player,
+        "players_played_this_round": game.players_played_this_round,
         "state": game.state,
         "scores": game.scores
     }
@@ -484,34 +488,61 @@ def start_game(game_id: int):
     game = games[game_id]
     if game.state != "waiting":
         raise HTTPException(status_code=400, detail="Game already started or finished")
-    # Pick first player randomly
+    # Pick first player randomly and start round 1
     game.current_player = random.choice([p.username for p in game.players])
+    game.current_round = 1
+    game.players_played_this_round = []
     game.state = "playing"
-    return {"current_player": game.current_player}
+    return {"current_player": game.current_player, "round": game.current_round}
 
-@app.post("/games/{game_id}/next_round")
-def next_round(game_id: int):
+@app.post("/games/{game_id}/next_player")
+def next_player(game_id: int):
     if game_id not in games:
         raise HTTPException(status_code=404, detail="Game not found")
     game = games[game_id]
     if game.state != "playing":
         raise HTTPException(status_code=400, detail="Game not in playing state")
-    # Remove played category if any
-    if game.current_round > 0 and len(game.played_categories) > 0:
-        available_categories = [c for c in game.categories.keys() if c not in game.played_categories]
+    
+    # Add current player to played list if not already there
+    if game.current_player and game.current_player not in game.players_played_this_round:
+        game.players_played_this_round.append(game.current_player)
+    
+    # Get all player usernames
+    all_players = [p.username for p in game.players]
+    
+    # Find players who haven't played this round
+    remaining_players_this_round = [p for p in all_players if p not in game.players_played_this_round]
+    
+    if remaining_players_this_round:
+        # Still players left in this round - pick randomly from remaining
+        game.current_player = random.choice(remaining_players_this_round)
+        return {
+            "current_player": game.current_player, 
+            "round": game.current_round,
+            "round_complete": False,
+            "players_remaining_this_round": len(remaining_players_this_round) - 1
+        }
     else:
-        available_categories = list(game.categories.keys())
-    # End game if no categories left
-    if not available_categories:
-        game.state = "finished"
-        return {"message": "Game finished", "scores": game.scores}
-    # Pick next player randomly
-    remaining_players = [p.username for p in game.players if p.username != game.current_player]
-    if not remaining_players:
-        remaining_players = [p.username for p in game.players]
-    game.current_player = random.choice(remaining_players)
-    game.current_round += 1
-    return {"current_player": game.current_player, "round": game.current_round}
+        # All players have played this round - start new round
+        available_categories = [c for c in game.categories.keys() if c not in game.played_categories]
+        
+        # Check if game should end
+        if not available_categories:
+            game.state = "finished"
+            return {"message": "Game finished", "scores": game.scores, "round_complete": True}
+        
+        # Start new round
+        game.current_round += 1
+        game.players_played_this_round = []
+        game.current_player = random.choice(all_players)
+        
+        return {
+            "current_player": game.current_player, 
+            "round": game.current_round,
+            "round_complete": True,
+            "new_round_started": True,
+            "players_remaining_this_round": len(all_players) - 1
+        }
 
 @app.post("/games/{game_id}/select_category")
 def select_category(game_id: int, selection: CategorySelection):
@@ -520,8 +551,20 @@ def select_category(game_id: int, selection: CategorySelection):
     game = games[game_id]
     if selection.category not in game.categories:
         raise HTTPException(status_code=400, detail="Category not in game")
-    game.played_categories.append(selection.category)
+    # Don't mark as played here - will be marked when round is complete
     return {"songs": [game.songs[sid] for sid in game.categories[selection.category].song_ids if sid in game.songs]}
+
+@app.post("/games/{game_id}/complete_category")
+def complete_category(game_id: int, selection: CategorySelection):
+    """Mark a category as completed/played"""
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    game = games[game_id]
+    if selection.category not in game.categories:
+        raise HTTPException(status_code=400, detail="Category not in game")
+    if selection.category not in game.played_categories:
+        game.played_categories.append(selection.category)
+    return {"message": f"Category '{selection.category}' marked as completed"}
 
 class SongSelection(BaseModel):
     song_id: int

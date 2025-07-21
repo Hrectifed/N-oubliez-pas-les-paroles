@@ -159,9 +159,16 @@ export async function addPlayerToGame(gameId, username, pictureUrl = null) {
   return res.json();
 }
 
-export async function removePlayerFromGame(gameId, username) {
-  const res = await fetch(`${API_URL}/games/${gameId}/players/${encodeURIComponent(username)}`, {
-    method: 'DELETE'
+export async function nextPlayer(gameId) {
+  const res = await fetch(`${API_URL}/games/${gameId}/next_player`, { method: 'POST' });
+  return res.json();
+}
+
+export async function completeCategory(gameId, category) {
+  const res = await fetch(`${API_URL}/games/${gameId}/complete_category`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category })
   });
   return res.json();
 }

@@ -148,7 +148,7 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     setInputResults(result.word_results || []);
     setShowResults(true);
     
-    // Set up when to hide results and resume
+    // Set up when to hide results and automatically continue
     const hideResultsTime = currentTime + 5000; // Show results for 5 seconds
     setResultDisplayEndTime(hideResultsTime);
     
@@ -157,6 +157,14 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
       playerRef.current.playVideo();
       setIsPlaying(true);
     }
+    
+    // Auto-hide and continue after 5 seconds
+    setTimeout(() => {
+      setShowInputs(false);
+      setShowResults(false);
+      setResultDisplayEndTime(null);
+      // The parent component will handle next player transition
+    }, 5000);
   };
 
   const renderLyrics = () => {

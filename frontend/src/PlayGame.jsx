@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getGame, startGame, selectCategory, selectSong, attemptLyrics, getGameCategories } from './api';
+import { getGame, startGame, selectCategory, selectSong, attemptLyrics, nextPlayer, completeCategory } from './api';
 import SingingMode from './SingingMode';
 
 function PlayGame({ gameId, onBack }) {
@@ -8,6 +8,7 @@ function PlayGame({ gameId, onBack }) {
   const [category, setCategory] = useState('');
   const [songs, setSongs] = useState([]);
   const [song, setSong] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [attempt, setAttempt] = useState([]);
   const [result, setResult] = useState(null);
 
@@ -39,7 +40,12 @@ function PlayGame({ gameId, onBack }) {
   };
 
   const handleSelectCategory = async cat => {
+    if (game.played_categories.includes(cat)) {
+      alert('Cette catégorie a déjà été jouée!');
+      return;
+    }
     setCategory(cat);
+    setSelectedCategory(cat);
     const res = await selectCategory(gameId, cat);
     setSongs(res.songs);
     setStep('song');
@@ -53,8 +59,28 @@ function PlayGame({ gameId, onBack }) {
 
   const handleAttemptSubmit = async (wordAttempts) => {
     const res = await attemptLyrics(gameId, song.id, wordAttempts, game.current_player);
-    setResult(res);
-    setStep('result');
+    
+    // Mark category as completed and move to next player
+    await completeCategory(gameId, selectedCategory);
+    const nextPlayerRes = await nextPlayer(gameId);
+    
+    // Refresh game state
+    const updatedGame = await getGame(gameId);
+    setGame(updatedGame);
+    
+    // Check if round is complete or game finished
+    if (nextPlayerRes.round_complete) {
+      if (nextPlayerRes.message === "Game finished") {
+        alert(`Partie terminée! Scores finaux: ${Object.entries(updatedGame.scores).map(([name, score]) => `${name}: ${score}`).join(', ')}`);
+        setStep('waiting');
+      } else {
+        alert(`Round ${nextPlayerRes.round - 1} terminé! Nouveau round commence.`);
+        setStep('category');
+      }
+    } else {
+      setStep('category');
+    }
+    
     return res;
   };
 
@@ -199,6 +225,16 @@ function PlayGame({ gameId, onBack }) {
       {step === 'category' && (
         <div>
           <h3>Choisissez une catégorie</h3>
+          <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#e3f2fd', borderRadius: '8px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>
+              🎯 Round {game.current_round} - Tour de {game.current_player}
+            </div>
+            {game.players_played_this_round && game.players_played_this_round.length > 0 && (
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                Ont déjà joué ce round: {game.players_played_this_round.join(', ')}
+              </div>
+            )}
+          </div>
           
           {game.categories && (() => {
             // Handle both array and object formats
@@ -206,9 +242,7 @@ function PlayGame({ gameId, onBack }) {
               ? game.categories 
               : Object.keys(game.categories);
             
-            const availableCategories = categoryKeys.filter(cat => !game.played_categories.includes(cat));
-            
-            if (availableCategories.length === 0) {
+            if (categoryKeys.length === 0) {
               return (
                 <div style={{ 
                   padding: '20px', 
@@ -218,36 +252,45 @@ function PlayGame({ gameId, onBack }) {
                   borderRadius: '8px',
                   margin: '20px 0'
                 }}>
-                  Toutes les catégories ont été jouées !
+                  Aucune catégorie disponible dans ce jeu.
                 </div>
               );
             }
             
-            return availableCategories.map(cat => (
-              <button 
-                key={cat} 
-                onClick={() => handleSelectCategory(cat)} 
-                style={{ 
-                  margin: '8px',
-                  padding: '15px 25px',
-                  backgroundColor: '#2196f3',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '18px',
-                  fontWeight: 'bold',
-                  transition: 'background-color 0.2s',
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#1976d2'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#2196f3'}
-              >
-                📂 {cat}
-              </button>
-            ));
+            return categoryKeys.map(cat => {
+              const isPlayed = game.played_categories.includes(cat);
+              return (
+                <button 
+                  key={cat} 
+                  onClick={() => handleSelectCategory(cat)} 
+                  disabled={isPlayed}
+                  style={{ 
+                    margin: '8px',
+                    padding: '15px 25px',
+                    backgroundColor: isPlayed ? '#e0e0e0' : '#2196f3',
+                    color: isPlayed ? '#999' : 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: isPlayed ? 'not-allowed' : 'pointer',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    transition: 'background-color 0.2s',
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    opacity: isPlayed ? 0.6 : 1
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isPlayed) e.target.style.backgroundColor = '#1976d2';
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isPlayed) e.target.style.backgroundColor = '#2196f3';
+                  }}
+                >
+                  {isPlayed ? '✓' : '📂'} {cat} {isPlayed ? '(Déjà jouée)' : ''}
+                </button>
+              );
+            });
           })()}
         </div>
       )}
@@ -314,82 +357,6 @@ function PlayGame({ gameId, onBack }) {
           onAttemptSubmit={handleAttemptSubmit}
           onBack={() => setStep('song')}
         />
-      )}
-      {step === 'result' && result && (
-        <div>
-          <h3>Résultat</h3>
-          {result.correct ? (
-            <div style={{ color: 'green', fontSize: '18px', margin: '20px 0' }}>
-              🎉 Parfait ! Toutes les paroles sont correctes !
-            </div>
-          ) : (
-            <div style={{ color: 'red', fontSize: '18px', margin: '20px 0' }}>
-              ❌ Quelques erreurs...
-            </div>
-          )}
-          
-          {result.word_results && result.word_results.length > 0 && (
-            <div style={{ margin: '20px 0' }}>
-              <h4>Détail des mots :</h4>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {result.word_results.map((wordResult, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '4px',
-                      backgroundColor: wordResult.correct ? '#c8e6c9' : '#ffcdd2',
-                      border: `2px solid ${wordResult.correct ? '#4caf50' : '#f44336'}`,
-                      margin: '2px'
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>
-                      {wordResult.correct ? '✓' : '✗'} {wordResult.word}
-                    </div>
-                    {!wordResult.correct && (
-                      <div style={{ fontSize: '12px', color: '#666' }}>
-                        Votre réponse: "{wordResult.attempt}"
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{ margin: '20px 0' }}>
-            <strong>Paroles attendues :</strong>
-            <div style={{ fontStyle: 'italic', margin: '10px 0' }}>
-              {result.expected.join(' ')}
-            </div>
-          </div>
-
-          {result.score && (
-            <div style={{ 
-              background: '#e3f2fd', 
-              padding: '10px', 
-              borderRadius: '4px',
-              margin: '20px 0' 
-            }}>
-              Score obtenu: {result.score}/100
-            </div>
-          )}
-
-          <button 
-            onClick={() => setStep('category')}
-            style={{ 
-              padding: '12px 24px',
-              backgroundColor: '#2196f3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '16px'
-            }}
-          >
-            Prochain tour
-          </button>
-        </div>
       )}
     </div>
   );
