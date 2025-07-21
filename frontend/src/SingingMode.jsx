@@ -3,7 +3,7 @@ import YouTube from 'react-youtube';
 
 function SingingMode({ song, onAttemptSubmit, onBack }) {
   const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true); // Auto-start
   const [hiddenWordsInput, setHiddenWordsInput] = useState([]);
   const [showInputs, setShowInputs] = useState(false);
   const [hiddenStartTime, setHiddenStartTime] = useState(null);
@@ -11,8 +11,10 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
   const [currentLyricIndex, setCurrentLyricIndex] = useState(0);
   const [inputResults, setInputResults] = useState([]);
   const [showResults, setShowResults] = useState(false);
+  const [resultDisplayEndTime, setResultDisplayEndTime] = useState(null);
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
+  const resultTimeoutRef = useRef(null);
 
   // Extract YouTube video ID from URL
   const getYouTubeId = (url) => {
@@ -74,6 +76,13 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
             setShowInputs(true);
             setIsPlaying(false);
           }
+
+          // Check if we should hide the results overlay
+          if (resultDisplayEndTime && time >= resultDisplayEndTime) {
+            setShowInputs(false);
+            setShowResults(false);
+            setResultDisplayEndTime(null);
+          }
         }
       }, 100);
     } else {
@@ -81,7 +90,7 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     }
 
     return () => clearInterval(intervalRef.current);
-  }, [isPlaying, hiddenStartTime, showInputs]);
+  }, [isPlaying, hiddenStartTime, showInputs, resultDisplayEndTime]);
 
   // Find current lyric based on time
   useEffect(() => {
@@ -97,24 +106,13 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
 
   const onPlayerReady = (event) => {
     playerRef.current = event.target;
+    // Auto-start the video
+    event.target.playVideo();
   };
 
   const onPlayerStateChange = (event) => {
-    setIsPlaying(event.data === YouTube.PlayerState.PLAYING);
-  };
-
-  const handlePlay = () => {
-    if (playerRef.current) {
-      playerRef.current.playVideo();
-      setIsPlaying(true);
-    }
-  };
-
-  const handlePause = () => {
-    if (playerRef.current) {
-      playerRef.current.pauseVideo();
-      setIsPlaying(false);
-    }
+    const isCurrentlyPlaying = event.data === YouTube.PlayerState.PLAYING;
+    setIsPlaying(isCurrentlyPlaying);
   };
 
   const handleWordInputChange = (index, value) => {
@@ -150,15 +148,15 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     setInputResults(result.word_results || []);
     setShowResults(true);
     
-    // Resume video after showing results for 3 seconds
-    setTimeout(() => {
-      setShowInputs(false);
-      setShowResults(false);
-      if (playerRef.current) {
-        playerRef.current.playVideo();
-        setIsPlaying(true);
-      }
-    }, 3000);
+    // Set up when to hide results and resume
+    const hideResultsTime = currentTime + 5000; // Show results for 5 seconds
+    setResultDisplayEndTime(hideResultsTime);
+    
+    // Resume video immediately but keep showing results overlay
+    if (playerRef.current) {
+      playerRef.current.playVideo();
+      setIsPlaying(true);
+    }
   };
 
   const renderLyrics = () => {
@@ -194,6 +192,27 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
       );
     }
 
+    // Hide lyrics that come after when showing results to prevent spoilers
+    if (showResults && showInputs) {
+      return (
+        <div style={{
+          padding: '20px',
+          textAlign: 'center',
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#666',
+          minHeight: '60px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '8px'
+        }}>
+          <i>Paroles masquées pendant la validation...</i>
+        </div>
+      );
+    }
+
     return (
       <div style={{
         padding: '20px',
@@ -218,10 +237,12 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
 
     return (
       <div style={{ 
-        background: '#f5f5f5', 
+        background: 'rgba(245, 245, 245, 0.95)', 
         padding: '20px', 
         borderRadius: '8px', 
-        margin: '20px 0' 
+        margin: '20px 0',
+        position: 'relative',
+        zIndex: 10
       }}>
         <h4>Complétez les paroles :</h4>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
@@ -234,40 +255,71 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
               onChange={(e) => handleWordInputChange(index, e.target.value)}
               onKeyPress={(e) => handleKeyPress(e, index)}
               style={{
-                width: `${Math.max(60, (inputResults[index]?.word.length || 4) * 10)}px`,
-                padding: '8px',
-                border: '2px solid #ddd',
-                borderRadius: '4px',
+                width: `${Math.max(80, (inputResults[index]?.word.length || 4) * 12)}px`,
+                padding: '10px',
+                border: showResults 
+                  ? `3px solid ${inputResults[index]?.correct ? '#4caf50' : '#f44336'}`
+                  : '2px solid #ddd',
+                borderRadius: '6px',
                 fontSize: '16px',
                 textAlign: 'center',
                 backgroundColor: showResults 
                   ? (inputResults[index]?.correct ? '#c8e6c9' : '#ffcdd2')
-                  : 'white'
+                  : 'white',
+                fontWeight: showResults ? 'bold' : 'normal'
               }}
               placeholder="___"
               autoComplete="off"
+              disabled={showResults}
             />
           ))}
         </div>
         
         {showResults && (
-          <div style={{ marginBottom: '16px' }}>
-            <h5>Résultats :</h5>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ 
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#fff',
+            borderRadius: '6px',
+            border: '2px solid #e0e0e0'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              marginBottom: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold'
+            }}>
+              {inputResults.every(r => r.correct) ? (
+                <span style={{ color: '#4caf50' }}>🎉 Parfait ! Toutes les réponses sont correctes !</span>
+              ) : (
+                <span style={{ color: '#f44336' }}>❌ Quelques erreurs... Voici les bonnes réponses :</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {inputResults.map((result, index) => (
                 <span
                   key={index}
                   style={{
-                    padding: '4px 8px',
+                    padding: '6px 10px',
                     borderRadius: '4px',
                     backgroundColor: result.correct ? '#4caf50' : '#f44336',
                     color: 'white',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    fontWeight: 'bold'
                   }}
                 >
                   {result.word}
                 </span>
               ))}
+            </div>
+            <div style={{ 
+              marginTop: '8px', 
+              fontSize: '12px', 
+              color: '#666',
+              fontStyle: 'italic'
+            }}>
+              Les résultats disparaîtront automatiquement...
             </div>
           </div>
         )}
@@ -278,15 +330,16 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
             disabled={hiddenWordsInput.some(word => !word.trim())}
             style={{
               padding: '12px 24px',
-              backgroundColor: '#4caf50',
+              backgroundColor: hiddenWordsInput.some(word => !word.trim()) ? '#ccc' : '#4caf50',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '16px'
+              cursor: hiddenWordsInput.some(word => !word.trim()) ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold'
             }}
           >
-            Valider
+            Valider les réponses
           </button>
         )}
       </div>
@@ -320,27 +373,11 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
                 iv_load_policy: 3,
                 modestbranding: 1,
                 rel: 0,
-                showinfo: 0
+                showinfo: 0,
+                autoplay: 1 // Enable autoplay
               }
             }}
           />
-          
-          <div style={{ marginTop: '10px', textAlign: 'center' }}>
-            <button
-              onClick={handlePlay}
-              disabled={isPlaying}
-              style={{ margin: '0 5px', padding: '8px 16px' }}
-            >
-              ▶ Play
-            </button>
-            <button
-              onClick={handlePause}
-              disabled={!isPlaying}
-              style={{ margin: '0 5px', padding: '8px 16px' }}
-            >
-              ⏸ Pause
-            </button>
-          </div>
         </div>
       ) : (
         <div style={{ 
