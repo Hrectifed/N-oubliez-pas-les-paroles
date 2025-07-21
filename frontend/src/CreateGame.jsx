@@ -231,18 +231,33 @@ function CreateGame({ onGameCreated }) {
 
   if (step === 1) {
     return (
-      <div style={{ maxWidth: 500, margin: '40px auto' }}>
-        <h2>Créer une partie</h2>
-        <div>
-          <h3>Nom de la partie</h3>
-          <input 
-            placeholder="Entrez le nom de la partie" 
-            value={gameName} 
-            onChange={e => setGameName(e.target.value)}
-            style={{ width: '100%', padding: '8px', marginBottom: '16px' }}
-          />
-          <button onClick={handleGameNameSubmit}>Suivant</button>
-          {error && <div style={{ color: 'red', marginTop: '8px' }}>{error}</div>}
+      <div className="container">
+        <div className="card" style={{ 
+          maxWidth: '500px', 
+          margin: '40px auto',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div className="card-header">
+            <h2 className="text-primary mb-0">🎵 Créer une partie</h2>
+          </div>
+          <div className="card-body">
+            <h3 className="mb-3">Nom de la partie</h3>
+            <input 
+              placeholder="Entrez le nom de la partie" 
+              value={gameName} 
+              onChange={e => setGameName(e.target.value)}
+              className="mb-3"
+            />
+            <button 
+              onClick={handleGameNameSubmit}
+              className="btn-primary w-full"
+              style={{ fontSize: '1.1rem' }}
+            >
+              Suivant →
+            </button>
+            {error && <div style={{ color: 'var(--error-color)', marginTop: '16px', padding: '12px', backgroundColor: '#ffebee', borderRadius: '4px' }}>{error}</div>}
+          </div>
         </div>
       </div>
     );

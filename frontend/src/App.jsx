@@ -10,7 +10,7 @@ function App() {
   const [gameId, setGameId] = useState(null);
 
   return (
-    <div>
+    <div style={{ minHeight: '100vh' }}>
       {screen === 'title' && (
         <TitleScreen 
           onCreate={() => setScreen('create')} 
