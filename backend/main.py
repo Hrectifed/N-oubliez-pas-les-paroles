@@ -139,6 +139,67 @@ def add_song_to_game(game_id: int, song: SongCreate):
     
     return new_song
 
+@app.put("/games/{game_id}/songs/{song_id}", response_model=Song)
+def update_song_in_game(game_id: int, song_id: int, song: SongCreate):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    if song_id not in game.songs:
+        raise HTTPException(status_code=404, detail="Song not found in this game")
+    
+    old_song = game.songs[song_id]
+    old_category = old_song.category
+    
+    # Parse new lyrics
+    lyrics = parse_lrc(song.lrc)
+    updated_song = Song(id=song_id, lyrics=lyrics, **song.dict())
+    game.songs[song_id] = updated_song
+    
+    # Handle category changes
+    if old_category != song.category:
+        # Remove from old category
+        if old_category in game.categories:
+            game.categories[old_category].song_ids = [
+                sid for sid in game.categories[old_category].song_ids if sid != song_id
+            ]
+            # Remove category if it becomes empty
+            if not game.categories[old_category].song_ids:
+                del game.categories[old_category]
+        
+        # Add to new category
+        if song.category not in game.categories:
+            game.categories[song.category] = Category(name=song.category, song_ids=[])
+        game.categories[song.category].song_ids.append(song_id)
+    
+    return updated_song
+
+@app.delete("/games/{game_id}/songs/{song_id}")
+def delete_song_from_game(game_id: int, song_id: int):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    if song_id not in game.songs:
+        raise HTTPException(status_code=404, detail="Song not found in this game")
+    
+    song = game.songs[song_id]
+    category = song.category
+    
+    # Remove song
+    del game.songs[song_id]
+    
+    # Remove from category
+    if category in game.categories:
+        game.categories[category].song_ids = [
+            sid for sid in game.categories[category].song_ids if sid != song_id
+        ]
+        # Remove category if it becomes empty
+        if not game.categories[category].song_ids:
+            del game.categories[category]
+    
+    return {"message": "Song deleted successfully"}
+
 @app.get("/games/{game_id}/categories", response_model=List[Category])
 def get_game_categories(game_id: int):
     if game_id not in games:
@@ -169,6 +230,116 @@ def add_category_to_game(game_id: int, category: CategorySelection):
     if category.category not in game.categories:
         game.categories[category.category] = Category(name=category.category, song_ids=[])
     return {"message": f"Category '{category.category}' added to game"}
+
+@app.put("/games/{game_id}/categories/{old_name}")
+def rename_category_in_game(game_id: int, old_name: str, category: CategorySelection):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    if old_name not in game.categories:
+        raise HTTPException(status_code=404, detail="Category not found in this game")
+    
+    if old_name != category.category:
+        # Rename category
+        game.categories[category.category] = game.categories[old_name]
+        del game.categories[old_name]
+        
+        # Update songs that reference this category
+        for song in game.songs.values():
+            if song.category == old_name:
+                song.category = category.category
+    
+    return {"message": f"Category renamed from '{old_name}' to '{category.category}'"}
+
+@app.delete("/games/{game_id}/categories/{category_name}")
+def delete_category_from_game(game_id: int, category_name: str):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    if category_name not in game.categories:
+        raise HTTPException(status_code=404, detail="Category not found in this game")
+    
+    # Delete all songs in this category
+    song_ids_to_delete = list(game.categories[category_name].song_ids)
+    for song_id in song_ids_to_delete:
+        if song_id in game.songs:
+            del game.songs[song_id]
+    
+    # Delete category
+    del game.categories[category_name]
+    
+    return {"message": f"Category '{category_name}' and all its songs deleted successfully"}
+
+# Player management
+class PlayerUpdate(BaseModel):
+    old_username: str
+    new_username: str
+
+@app.put("/games/{game_id}/players")
+def update_player_in_game(game_id: int, player_update: PlayerUpdate):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    
+    # Find and update player
+    for player in game.players:
+        if player.username == player_update.old_username:
+            player.username = player_update.new_username
+            break
+    else:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Update scores dictionary
+    if player_update.old_username in game.scores:
+        game.scores[player_update.new_username] = game.scores.pop(player_update.old_username)
+    
+    # Update current player if needed
+    if game.current_player == player_update.old_username:
+        game.current_player = player_update.new_username
+    
+    return {"message": f"Player renamed from '{player_update.old_username}' to '{player_update.new_username}'"}
+
+@app.post("/games/{game_id}/players")
+def add_player_to_game(game_id: int, player: Player):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    
+    # Check if player already exists
+    if any(p.username == player.username for p in game.players):
+        raise HTTPException(status_code=400, detail="Player already exists")
+    
+    game.players.append(player)
+    game.scores[player.username] = 0
+    
+    return {"message": f"Player '{player.username}' added to game"}
+
+@app.delete("/games/{game_id}/players/{username}")
+def remove_player_from_game(game_id: int, username: str):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    
+    # Remove player
+    game.players = [p for p in game.players if p.username != username]
+    
+    # Remove from scores
+    if username in game.scores:
+        del game.scores[username]
+    
+    # Update current player if needed
+    if game.current_player == username:
+        if game.players:
+            game.current_player = game.players[0].username
+        else:
+            game.current_player = None
+    
+    return {"message": f"Player '{username}' removed from game"}
 
 # --- Game Management ---
 class GameCreate(BaseModel):

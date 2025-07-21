@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createGame, addSongToGame, addCategoryToGame } from './api';
+import { createGame, addSongToGame, addCategoryToGame, updateSongInGame, deleteSongFromGame, renameCategoryInGame, deleteCategoryFromGame, updatePlayerInGame, addPlayerToGame, removePlayerFromGame } from './api';
 import LyricsSelector from './LyricsSelector';
 import GameSelector from './GameSelector';
 import { parseLRC } from './lrcUtils';
@@ -26,6 +26,9 @@ function CreateGame({ onGameCreated }) {
   const [showSongForm, setShowSongForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingSong, setEditingSong] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingPlayerIndex, setEditingPlayerIndex] = useState(null);
 
   // Step 1: Game name
   const handleGameNameSubmit = async () => {
@@ -54,8 +57,18 @@ function CreateGame({ onGameCreated }) {
     }
     
     try {
-      const newSong = await addSongToGame(gameId, song);
-      setSongs([...songs, newSong]);
+      let newSong;
+      if (editingSong) {
+        // Update existing song
+        newSong = await updateSongInGame(gameId, editingSong.id, song);
+        setSongs(songs.map(s => s.id === editingSong.id ? newSong : s));
+        setEditingSong(null);
+      } else {
+        // Add new song
+        newSong = await addSongToGame(gameId, song);
+        setSongs([...songs, newSong]);
+      }
+      
       if (!categories.includes(song.category)) {
         setCategories([...categories, song.category]);
       }
@@ -64,7 +77,36 @@ function CreateGame({ onGameCreated }) {
       setShowSongForm(false);
       setError('');
     } catch (error) {
-      setError('Erreur lors de l\'ajout de la chanson');
+      setError('Erreur lors de l\'ajout/modification de la chanson');
+    }
+  };
+
+  const handleEditSong = (songToEdit) => {
+    setEditingSong(songToEdit);
+    setSong({
+      title: songToEdit.title,
+      category: songToEdit.category,
+      youtube_url: songToEdit.youtube_url,
+      spotify_id: songToEdit.spotify_id,
+      lrc: songToEdit.lrc,
+      hidden_line_indices: songToEdit.hidden_line_indices
+    });
+    setLrcLines(songToEdit.lyrics || []);
+    setShowSongForm(true);
+  };
+
+  const handleDeleteSong = async (songId) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette chanson ?')) {
+      try {
+        await deleteSongFromGame(gameId, songId);
+        setSongs(songs.filter(s => s.id !== songId));
+        // Update categories if needed
+        const remainingSongs = songs.filter(s => s.id !== songId);
+        const usedCategories = [...new Set(remainingSongs.map(s => s.category))];
+        setCategories(usedCategories);
+      } catch (error) {
+        setError('Erreur lors de la suppression de la chanson');
+      }
     }
   };
 
@@ -75,13 +117,45 @@ function CreateGame({ onGameCreated }) {
     }
     
     try {
-      await addCategoryToGame(gameId, newCategoryName);
-      setCategories([...categories, newCategoryName]);
+      if (editingCategory) {
+        // Rename existing category
+        await renameCategoryInGame(gameId, editingCategory, newCategoryName);
+        setCategories(categories.map(cat => cat === editingCategory ? newCategoryName : cat));
+        setSongs(songs.map(song => 
+          song.category === editingCategory 
+            ? { ...song, category: newCategoryName }
+            : song
+        ));
+        setEditingCategory(null);
+      } else {
+        // Add new category
+        await addCategoryToGame(gameId, newCategoryName);
+        setCategories([...categories, newCategoryName]);
+      }
+      
       setNewCategoryName('');
       setShowCategoryForm(false);
       setError('');
     } catch (error) {
-      setError('Erreur lors de l\'ajout de la catégorie');
+      setError('Erreur lors de l\'ajout/modification de la catégorie');
+    }
+  };
+
+  const handleEditCategory = (categoryName) => {
+    setEditingCategory(categoryName);
+    setNewCategoryName(categoryName);
+    setShowCategoryForm(true);
+  };
+
+  const handleDeleteCategory = async (categoryName) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette catégorie et toutes ses chansons ?')) {
+      try {
+        await deleteCategoryFromGame(gameId, categoryName);
+        setCategories(categories.filter(cat => cat !== categoryName));
+        setSongs(songs.filter(song => song.category !== categoryName));
+      } catch (error) {
+        setError('Erreur lors de la suppression de la catégorie');
+      }
     }
   };
 
@@ -115,6 +189,17 @@ function CreateGame({ onGameCreated }) {
     const arr = [...players];
     arr[i] = value;
     setPlayers(arr);
+    setEditingPlayerIndex(null);
+  };
+
+  const handleRemovePlayer = (index) => {
+    if (players.length > 1) {
+      setPlayers(players.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleEditPlayer = (index) => {
+    setEditingPlayerIndex(index);
   };
 
   const handlePlayersSubmit = async () => {
@@ -195,9 +280,44 @@ function CreateGame({ onGameCreated }) {
                   borderRadius: '4px', 
                   padding: '12px', 
                   marginBottom: '8px',
-                  backgroundColor: '#f9f9f9'
+                  backgroundColor: '#f9f9f9',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}>
-                  <strong>{s.title}</strong> - {s.category}
+                  <div>
+                    <strong>{s.title}</strong> - {s.category}
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => handleEditSong(s)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#2196f3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      ✏️ Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSong(s.id)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🗑️ Suppr.
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -233,7 +353,44 @@ function CreateGame({ onGameCreated }) {
                     marginBottom: '8px',
                     backgroundColor: '#f0f8ff'
                   }}>
-                    <strong>{cat}</strong> ({categorySongs.length} chansons)
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '8px'
+                    }}>
+                      <strong>{cat}</strong> ({categorySongs.length} chansons)
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => handleEditCategory(cat)}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#ff9800',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          ✏️ Renommer
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(cat)}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          🗑️ Suppr.
+                        </button>
+                      </div>
+                    </div>
                     {categorySongs.length === 0 && (
                       <div style={{ 
                         fontStyle: 'italic', 
@@ -241,7 +398,6 @@ function CreateGame({ onGameCreated }) {
                         textAlign: 'center',
                         border: '2px dashed #ccc',
                         padding: '16px',
-                        marginTop: '8px',
                         borderRadius: '4px'
                       }}>
                         Glissez-déposez des chansons ici
@@ -300,7 +456,7 @@ function CreateGame({ onGameCreated }) {
               maxHeight: '80%',
               overflowY: 'auto'
             }}>
-              <h3>Ajouter une chanson</h3>
+              <h3>{editingSong ? 'Modifier la chanson' : 'Ajouter une chanson'}</h3>
               <input 
                 placeholder="Titre" 
                 value={song.title} 
@@ -351,7 +507,12 @@ function CreateGame({ onGameCreated }) {
               
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button 
-                  onClick={() => setShowSongForm(false)}
+                  onClick={() => {
+                    setShowSongForm(false);
+                    setEditingSong(null);
+                    setSong({ title: '', category: '', youtube_url: '', spotify_id: '', lrc: '', hidden_line_indices: [] });
+                    setLrcLines([]);
+                  }}
                   style={{ padding: '8px 16px' }}
                 >
                   Annuler
@@ -366,7 +527,7 @@ function CreateGame({ onGameCreated }) {
                     borderRadius: '4px'
                   }}
                 >
-                  Ajouter
+                  {editingSong ? 'Modifier' : 'Ajouter'}
                 </button>
               </div>
               {error && <div style={{ color: 'red', marginTop: '8px' }}>{error}</div>}
@@ -395,7 +556,7 @@ function CreateGame({ onGameCreated }) {
               maxWidth: '400px',
               width: '90%'
             }}>
-              <h3>Ajouter une catégorie</h3>
+              <h3>{editingCategory ? 'Renommer la catégorie' : 'Ajouter une catégorie'}</h3>
               <input 
                 placeholder="Nom de la catégorie" 
                 value={newCategoryName} 
@@ -405,7 +566,11 @@ function CreateGame({ onGameCreated }) {
               
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button 
-                  onClick={() => setShowCategoryForm(false)}
+                  onClick={() => {
+                    setShowCategoryForm(false);
+                    setEditingCategory(null);
+                    setNewCategoryName('');
+                  }}
                   style={{ padding: '8px 16px' }}
                 >
                   Annuler
@@ -420,7 +585,7 @@ function CreateGame({ onGameCreated }) {
                     borderRadius: '4px'
                   }}
                 >
-                  Ajouter
+                  {editingCategory ? 'Renommer' : 'Ajouter'}
                 </button>
               </div>
               {error && <div style={{ color: 'red', marginTop: '8px' }}>{error}</div>}
@@ -433,27 +598,90 @@ function CreateGame({ onGameCreated }) {
 
   if (step === 3) {
     return (
-      <div style={{ maxWidth: 500, margin: '40px auto' }}>
+      <div style={{ maxWidth: 600, margin: '40px auto' }}>
         <h2>Gérer les joueurs - {gameName}</h2>
         <div>
           <h3>Ajouter des joueurs</h3>
           {players.map((p, i) => (
-            <input 
-              key={i} 
-              placeholder={`Joueur ${i + 1}`} 
-              value={p} 
-              onChange={e => handlePlayerChange(i, e.target.value)}
-              style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
-            />
+            <div key={i} style={{ 
+              display: 'flex', 
+              gap: '8px', 
+              marginBottom: '8px', 
+              alignItems: 'center' 
+            }}>
+              <input 
+                placeholder={`Joueur ${i + 1}`} 
+                value={p} 
+                onChange={e => handlePlayerChange(i, e.target.value)}
+                style={{ 
+                  flex: 1, 
+                  padding: '8px',
+                  border: editingPlayerIndex === i ? '2px solid #2196f3' : '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+                onFocus={() => setEditingPlayerIndex(i)}
+                onBlur={() => setEditingPlayerIndex(null)}
+              />
+              {players.length > 1 && (
+                <button
+                  onClick={() => handleRemovePlayer(i)}
+                  style={{
+                    padding: '8px',
+                    backgroundColor: '#f44336',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                  title="Supprimer ce joueur"
+                >
+                  🗑️
+                </button>
+              )}
+            </div>
           ))}
-          <button onClick={handleAddPlayer} style={{ marginBottom: '16px' }}>
-            Ajouter un joueur
-          </button>
+          <div style={{ marginBottom: '16px' }}>
+            <button 
+              onClick={handleAddPlayer}
+              style={{ 
+                padding: '8px 16px',
+                backgroundColor: '#4caf50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              + Ajouter un joueur
+            </button>
+          </div>
           <div>
-            <button onClick={handlePlayersSubmit} style={{ marginRight: '8px' }}>
+            <button 
+              onClick={handlePlayersSubmit} 
+              style={{ 
+                marginRight: '8px',
+                padding: '12px 24px',
+                backgroundColor: '#ff9800',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
               Créer la partie
             </button>
-            <button onClick={() => setStep(2)}>
+            <button 
+              onClick={() => setStep(2)}
+              style={{ 
+                padding: '12px 24px',
+                backgroundColor: '#666',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
               Retour
             </button>
           </div>

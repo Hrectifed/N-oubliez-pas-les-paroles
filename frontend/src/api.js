@@ -103,3 +103,61 @@ export async function addCategoryToGame(gameId, category) {
   });
   return res.json();
 }
+
+// Edit functions
+export async function updateSongInGame(gameId, songId, song) {
+  const res = await fetch(`${API_URL}/games/${gameId}/songs/${songId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(song)
+  });
+  return res.json();
+}
+
+export async function deleteSongFromGame(gameId, songId) {
+  const res = await fetch(`${API_URL}/games/${gameId}/songs/${songId}`, {
+    method: 'DELETE'
+  });
+  return res.json();
+}
+
+export async function renameCategoryInGame(gameId, oldName, newName) {
+  const res = await fetch(`${API_URL}/games/${gameId}/categories/${encodeURIComponent(oldName)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: newName })
+  });
+  return res.json();
+}
+
+export async function deleteCategoryFromGame(gameId, categoryName) {
+  const res = await fetch(`${API_URL}/games/${gameId}/categories/${encodeURIComponent(categoryName)}`, {
+    method: 'DELETE'
+  });
+  return res.json();
+}
+
+export async function updatePlayerInGame(gameId, oldUsername, newUsername) {
+  const res = await fetch(`${API_URL}/games/${gameId}/players`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old_username: oldUsername, new_username: newUsername })
+  });
+  return res.json();
+}
+
+export async function addPlayerToGame(gameId, username) {
+  const res = await fetch(`${API_URL}/games/${gameId}/players`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username })
+  });
+  return res.json();
+}
+
+export async function removePlayerFromGame(gameId, username) {
+  const res = await fetch(`${API_URL}/games/${gameId}/players/${encodeURIComponent(username)}`, {
+    method: 'DELETE'
+  });
+  return res.json();
+}
