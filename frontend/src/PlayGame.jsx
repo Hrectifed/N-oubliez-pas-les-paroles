@@ -70,7 +70,131 @@ function PlayGame({ gameId, onBack }) {
           </button>
         )}
       </div>
-      <div>Joueur actuel: {game.current_player || 'En attente'}</div>
+      
+      {/* Current Player Display */}
+      {game.current_player && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '12px',
+          marginBottom: '20px',
+          padding: '16px',
+          backgroundColor: '#e3f2fd',
+          borderRadius: '8px',
+          border: '2px solid #2196f3'
+        }}>
+          {(() => {
+            const currentPlayerObj = game.players.find(p => p.username === game.current_player);
+            return (
+              <>
+                <div style={{ 
+                  width: '50px', 
+                  height: '50px', 
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '2px solid #2196f3',
+                  backgroundColor: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {currentPlayerObj?.picture_url ? (
+                    <img 
+                      src={currentPlayerObj.picture_url} 
+                      alt={game.current_player}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'block';
+                      }}
+                    />
+                  ) : null}
+                  <div style={{ 
+                    fontSize: '20px', 
+                    color: '#2196f3',
+                    display: currentPlayerObj?.picture_url ? 'none' : 'block'
+                  }}>
+                    👤
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2196f3' }}>
+                    🎤 Tour de {game.current_player}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#666' }}>
+                    Score: {game.scores[game.current_player] || 0} points
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* All Players Display */}
+      {game.players && game.players.length > 1 && (
+        <div style={{ 
+          marginBottom: '20px',
+          padding: '16px',
+          backgroundColor: '#f5f5f5',
+          borderRadius: '8px'
+        }}>
+          <h4 style={{ marginTop: 0, marginBottom: '12px' }}>📊 Scores des joueurs</h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            {game.players.map(player => (
+              <div key={player.username} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: player.username === game.current_player ? '#c8e6c9' : '#fff',
+                borderRadius: '6px',
+                border: player.username === game.current_player ? '2px solid #4caf50' : '1px solid #ddd',
+                minWidth: '120px'
+              }}>
+                <div style={{ 
+                  width: '30px', 
+                  height: '30px', 
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f0f0f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {player.picture_url ? (
+                    <img 
+                      src={player.picture_url} 
+                      alt={player.username}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'block';
+                      }}
+                    />
+                  ) : null}
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#666',
+                    display: player.picture_url ? 'none' : 'block'
+                  }}>
+                    👤
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                    {player.username}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    {game.scores[player.username] || 0} pts
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {step === 'waiting' && <button onClick={handleStart}>Démarrer la partie</button>}
       {step === 'category' && (
         <div>

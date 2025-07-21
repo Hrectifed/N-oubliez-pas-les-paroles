@@ -137,20 +137,24 @@ export async function deleteCategoryFromGame(gameId, categoryName) {
   return res.json();
 }
 
-export async function updatePlayerInGame(gameId, oldUsername, newUsername) {
+export async function updatePlayerInGame(gameId, oldUsername, newUsername, pictureUrl = null) {
   const res = await fetch(`${API_URL}/games/${gameId}/players`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ old_username: oldUsername, new_username: newUsername })
+    body: JSON.stringify({ 
+      old_username: oldUsername, 
+      new_username: newUsername,
+      picture_url: pictureUrl
+    })
   });
   return res.json();
 }
 
-export async function addPlayerToGame(gameId, username) {
+export async function addPlayerToGame(gameId, username, pictureUrl = null) {
   const res = await fetch(`${API_URL}/games/${gameId}/players`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
+    body: JSON.stringify({ username, picture_url: pictureUrl })
   });
   return res.json();
 }

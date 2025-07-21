@@ -61,6 +61,7 @@ class Category(BaseModel):
 
 class Player(BaseModel):
     username: str
+    picture_url: Optional[str] = None
 
 class Game(BaseModel):
     id: int
@@ -276,6 +277,7 @@ def delete_category_from_game(game_id: int, category_name: str):
 class PlayerUpdate(BaseModel):
     old_username: str
     new_username: str
+    picture_url: Optional[str] = None
 
 @app.put("/games/{game_id}/players")
 def update_player_in_game(game_id: int, player_update: PlayerUpdate):
@@ -288,6 +290,8 @@ def update_player_in_game(game_id: int, player_update: PlayerUpdate):
     for player in game.players:
         if player.username == player_update.old_username:
             player.username = player_update.new_username
+            if player_update.picture_url is not None:
+                player.picture_url = player_update.picture_url
             break
     else:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -300,7 +304,7 @@ def update_player_in_game(game_id: int, player_update: PlayerUpdate):
     if game.current_player == player_update.old_username:
         game.current_player = player_update.new_username
     
-    return {"message": f"Player renamed from '{player_update.old_username}' to '{player_update.new_username}'"}
+    return {"message": f"Player updated successfully"}
 
 @app.post("/games/{game_id}/players")
 def add_player_to_game(game_id: int, player: Player):
@@ -380,7 +384,7 @@ def create_game(game: GameCreate):
     game_obj = Game(
         id=game_id,
         name=game.name,
-        players=players,
+        players=[Player(username=name, picture_url=None) for name in game.player_names],
         songs=game_songs,
         categories=game_categories,
         played_categories=[],

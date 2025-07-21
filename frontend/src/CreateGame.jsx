@@ -10,7 +10,7 @@ function CreateGame({ onGameCreated }) {
   const [gameId, setGameId] = useState(null);
   const [songs, setSongs] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [players, setPlayers] = useState(['']);
+  const [players, setPlayers] = useState([{ username: '', picture_url: '' }]);
   const [error, setError] = useState('');
   
   // Song form state
@@ -182,12 +182,12 @@ function CreateGame({ onGameCreated }) {
 
   // Step 3: Player management
   const handleAddPlayer = () => {
-    setPlayers([...players, '']);
+    setPlayers([...players, { username: '', picture_url: '' }]);
   };
 
-  const handlePlayerChange = (i, value) => {
+  const handlePlayerChange = (i, field, value) => {
     const arr = [...players];
-    arr[i] = value;
+    arr[i] = { ...arr[i], [field]: value };
     setPlayers(arr);
     setEditingPlayerIndex(null);
   };
@@ -203,7 +203,7 @@ function CreateGame({ onGameCreated }) {
   };
 
   const handlePlayersSubmit = async () => {
-    const filtered = players.map(p => p.trim()).filter(Boolean);
+    const filtered = players.filter(p => p.username.trim()).map(p => ({ ...p, username: p.username.trim() }));
     if (filtered.length === 0) {
       setError('Ajoutez au moins un joueur.');
       return;
@@ -212,7 +212,7 @@ function CreateGame({ onGameCreated }) {
     // Update the game with real players
     const updatedGame = await createGame({ 
       name: gameName, 
-      player_names: filtered,
+      player_names: filtered.map(p => p.username),
       songs: songs.map(s => ({
         title: s.title,
         category: s.category,
@@ -598,30 +598,87 @@ function CreateGame({ onGameCreated }) {
 
   if (step === 3) {
     return (
-      <div style={{ maxWidth: 600, margin: '40px auto' }}>
+      <div style={{ maxWidth: 800, margin: '40px auto' }}>
         <h2>Gérer les joueurs - {gameName}</h2>
         <div>
           <h3>Ajouter des joueurs</h3>
-          {players.map((p, i) => (
+          {players.map((player, i) => (
             <div key={i} style={{ 
               display: 'flex', 
-              gap: '8px', 
-              marginBottom: '8px', 
-              alignItems: 'center' 
+              gap: '12px', 
+              marginBottom: '16px', 
+              alignItems: 'center',
+              padding: '16px',
+              border: editingPlayerIndex === i ? '2px solid #2196f3' : '1px solid #ddd',
+              borderRadius: '8px',
+              backgroundColor: '#f9f9f9'
             }}>
-              <input 
-                placeholder={`Joueur ${i + 1}`} 
-                value={p} 
-                onChange={e => handlePlayerChange(i, e.target.value)}
-                style={{ 
-                  flex: 1, 
-                  padding: '8px',
-                  border: editingPlayerIndex === i ? '2px solid #2196f3' : '1px solid #ddd',
-                  borderRadius: '4px'
-                }}
-                onFocus={() => setEditingPlayerIndex(i)}
-                onBlur={() => setEditingPlayerIndex(null)}
-              />
+              {/* Player Picture */}
+              <div style={{ 
+                width: '60px', 
+                height: '60px', 
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '2px solid #ddd',
+                backgroundColor: '#e0e0e0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {player.picture_url ? (
+                  <img 
+                    src={player.picture_url} 
+                    alt={`${player.username || `Joueur ${i + 1}`}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'block';
+                    }}
+                  />
+                ) : null}
+                <div style={{ 
+                  fontSize: '24px', 
+                  color: '#666',
+                  display: player.picture_url ? 'none' : 'block'
+                }}>
+                  👤
+                </div>
+              </div>
+
+              {/* Player Info */}
+              <div style={{ flex: 1 }}>
+                <input 
+                  placeholder={`Nom du joueur ${i + 1}`} 
+                  value={player.username} 
+                  onChange={e => handlePlayerChange(i, 'username', e.target.value)}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px',
+                    marginBottom: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                  onFocus={() => setEditingPlayerIndex(i)}
+                  onBlur={() => setEditingPlayerIndex(null)}
+                />
+                <input 
+                  placeholder="URL de l'image (optionnel)" 
+                  value={player.picture_url} 
+                  onChange={e => handlePlayerChange(i, 'picture_url', e.target.value)}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '12px'
+                  }}
+                  onFocus={() => setEditingPlayerIndex(i)}
+                  onBlur={() => setEditingPlayerIndex(null)}
+                />
+              </div>
+
+              {/* Remove Button */}
               {players.length > 1 && (
                 <button
                   onClick={() => handleRemovePlayer(i)}
@@ -631,7 +688,8 @@ function CreateGame({ onGameCreated }) {
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    minWidth: '40px'
                   }}
                   title="Supprimer ce joueur"
                 >
@@ -640,21 +698,39 @@ function CreateGame({ onGameCreated }) {
               )}
             </div>
           ))}
+          
           <div style={{ marginBottom: '16px' }}>
             <button 
               onClick={handleAddPlayer}
               style={{ 
-                padding: '8px 16px',
+                padding: '12px 20px',
                 backgroundColor: '#4caf50',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: '14px'
               }}
             >
               + Ajouter un joueur
             </button>
           </div>
+          
+          <div style={{ 
+            padding: '16px',
+            backgroundColor: '#e3f2fd',
+            borderRadius: '8px',
+            marginBottom: '16px'
+          }}>
+            <h4 style={{ marginTop: 0 }}>💡 Conseils pour les photos :</h4>
+            <ul style={{ margin: 0, fontSize: '14px' }}>
+              <li>Utilisez des URLs d'images accessibles publiquement</li>
+              <li>Format recommandé : carré (1:1) pour un meilleur rendu</li>
+              <li>Évitez les images trop lourdes pour un chargement rapide</li>
+              <li>Exemples d'hébergement : imgur.com, cloudinary.com</li>
+            </ul>
+          </div>
+          
           <div>
             <button 
               onClick={handlePlayersSubmit} 
