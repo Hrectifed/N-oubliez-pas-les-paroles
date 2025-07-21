@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createGame, addSongToGame, addCategoryToGame, updateSongInGame, deleteSongFromGame, renameCategoryInGame, deleteCategoryFromGame, updatePlayerInGame, addPlayerToGame, removePlayerFromGame } from './api';
+import { createGame, addSongToGame, addCategoryToGame, updateSongInGame, deleteSongFromGame, renameCategoryInGame, deleteCategoryFromGame, updatePlayerInGame, addPlayerToGame } from './api';
 import LyricsSelector from './LyricsSelector';
 import GameSelector from './GameSelector';
 import { parseLRC } from './lrcUtils';
