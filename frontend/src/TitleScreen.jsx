@@ -1,6 +1,6 @@
 import React from 'react';
 
-function TitleScreen({ onCreate, onPlay, onManageSongs }) {
+function TitleScreen({ onCreate, onPlay }) {
   return (
     <div style={{ textAlign: 'center', marginTop: 40 }}>
       <h1>Retenez les paroles</h1>
@@ -10,9 +10,6 @@ function TitleScreen({ onCreate, onPlay, onManageSongs }) {
         </button>
         <button onClick={onPlay} style={{ margin: '0 10px', padding: '10px 20px' }}>
           Jouer une partie
-        </button>
-        <button onClick={onManageSongs} style={{ margin: '0 10px', padding: '10px 20px' }}>
-          Gérer les chansons
         </button>
       </div>
     </div>

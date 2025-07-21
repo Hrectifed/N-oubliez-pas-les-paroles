@@ -69,3 +69,37 @@ export async function addSong(song) {
   });
   return res.json();
 }
+
+// Game-specific API functions
+export async function getGameCategories(gameId) {
+  const res = await fetch(`${API_URL}/games/${gameId}/categories`);
+  return res.json();
+}
+
+export async function getGameSongs(gameId) {
+  const res = await fetch(`${API_URL}/games/${gameId}/songs`);
+  return res.json();
+}
+
+export async function getGameSongsByCategory(gameId, category) {
+  const res = await fetch(`${API_URL}/games/${gameId}/categories/${encodeURIComponent(category)}/songs`);
+  return res.json();
+}
+
+export async function addSongToGame(gameId, song) {
+  const res = await fetch(`${API_URL}/games/${gameId}/songs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(song)
+  });
+  return res.json();
+}
+
+export async function addCategoryToGame(gameId, category) {
+  const res = await fetch(`${API_URL}/games/${gameId}/categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category })
+  });
+  return res.json();
+}

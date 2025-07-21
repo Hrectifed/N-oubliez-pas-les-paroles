@@ -66,7 +66,8 @@ class Game(BaseModel):
     id: int
     name: str
     players: List[Player]
-    categories: List[str]
+    songs: Dict[int, Song]  # Game-specific songs
+    categories: Dict[str, Category]  # Game-specific categories
     played_categories: List[str]
     current_round: int
     current_player: Optional[str]
@@ -117,24 +118,100 @@ def get_songs_by_category(category_name: str):
         raise HTTPException(status_code=404, detail="Category not found")
     return [songs[sid] for sid in categories[category_name].song_ids]
 
+# --- Game-specific Song & Category Management ---
+@app.post("/games/{game_id}/songs", response_model=Song)
+def add_song_to_game(game_id: int, song: SongCreate):
+    global song_counter
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    song_id = song_counter
+    song_counter += 1
+    lyrics = parse_lrc(song.lrc)
+    new_song = Song(id=song_id, lyrics=lyrics, **song.dict())
+    game.songs[song_id] = new_song
+    
+    # Add to game-specific category
+    if song.category not in game.categories:
+        game.categories[song.category] = Category(name=song.category, song_ids=[])
+    game.categories[song.category].song_ids.append(song_id)
+    
+    return new_song
+
+@app.get("/games/{game_id}/categories", response_model=List[Category])
+def get_game_categories(game_id: int):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return list(games[game_id].categories.values())
+
+@app.get("/games/{game_id}/songs", response_model=List[Song])
+def get_game_songs(game_id: int):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return list(games[game_id].songs.values())
+
+@app.get("/games/{game_id}/categories/{category_name}/songs", response_model=List[Song])
+def get_game_songs_by_category(game_id: int, category_name: str):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    game = games[game_id]
+    if category_name not in game.categories:
+        raise HTTPException(status_code=404, detail="Category not found in this game")
+    return [game.songs[sid] for sid in game.categories[category_name].song_ids if sid in game.songs]
+
+@app.post("/games/{game_id}/categories")
+def add_category_to_game(game_id: int, category: CategorySelection):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    game = games[game_id]
+    if category.category not in game.categories:
+        game.categories[category.category] = Category(name=category.category, song_ids=[])
+    return {"message": f"Category '{category.category}' added to game"}
+
 # --- Game Management ---
 class GameCreate(BaseModel):
     name: str
     player_names: List[str]
+    songs: Optional[List[SongCreate]] = []
+    categories: Optional[List[str]] = []
 
 @app.post("/games", response_model=Game)
 def create_game(game: GameCreate):
-    global game_counter
-    if len(categories) == 0:
-        raise HTTPException(status_code=400, detail="No categories available")
+    global game_counter, song_counter
     game_id = game_counter
     game_counter += 1
     players = [Player(username=name) for name in game.player_names]
+    
+    # Create game-specific songs and categories
+    game_songs = {}
+    game_categories = {}
+    
+    # Process songs for this game
+    for song_data in game.songs:
+        song_id = song_counter
+        song_counter += 1
+        lyrics = parse_lrc(song_data.lrc)
+        new_song = Song(id=song_id, lyrics=lyrics, **song_data.dict())
+        game_songs[song_id] = new_song
+        
+        # Add to game-specific category
+        if song_data.category not in game_categories:
+            game_categories[song_data.category] = Category(name=song_data.category, song_ids=[])
+        game_categories[song_data.category].song_ids.append(song_id)
+    
+    # Add any additional empty categories
+    for cat_name in game.categories:
+        if cat_name not in game_categories:
+            game_categories[cat_name] = Category(name=cat_name, song_ids=[])
+    
     game_obj = Game(
         id=game_id,
         name=game.name,
         players=players,
-        categories=list(categories.keys()),
+        songs=game_songs,
+        categories=game_categories,
         played_categories=[],
         current_round=0,
         current_player=None,
@@ -182,9 +259,11 @@ def next_round(game_id: int):
         raise HTTPException(status_code=400, detail="Game not in playing state")
     # Remove played category if any
     if game.current_round > 0 and len(game.played_categories) > 0:
-        game.categories = [c for c in game.categories if c not in game.played_categories]
+        available_categories = [c for c in game.categories.keys() if c not in game.played_categories]
+    else:
+        available_categories = list(game.categories.keys())
     # End game if no categories left
-    if not game.categories:
+    if not available_categories:
         game.state = "finished"
         return {"message": "Game finished", "scores": game.scores}
     # Pick next player randomly
@@ -206,7 +285,7 @@ def select_category(game_id: int, selection: CategorySelection):
     if selection.category not in game.categories:
         raise HTTPException(status_code=400, detail="Category not in game")
     game.played_categories.append(selection.category)
-    return {"songs": [songs[sid] for sid in categories[selection.category].song_ids]}
+    return {"songs": [game.songs[sid] for sid in game.categories[selection.category].song_ids if sid in game.songs]}
 
 class SongSelection(BaseModel):
     song_id: int
@@ -215,9 +294,10 @@ class SongSelection(BaseModel):
 def select_song(game_id: int, selection: SongSelection):
     if game_id not in games:
         raise HTTPException(status_code=404, detail="Game not found")
-    if selection.song_id not in songs:
-        raise HTTPException(status_code=404, detail="Song not found")
-    song = songs[selection.song_id]
+    game = games[game_id]
+    if selection.song_id not in game.songs:
+        raise HTTPException(status_code=404, detail="Song not found in this game")
+    song = game.songs[selection.song_id]
     return song
 
 class LyricsAttempt(BaseModel):
@@ -229,10 +309,11 @@ class LyricsAttempt(BaseModel):
 def attempt_lyrics(game_id: int, attempt: LyricsAttempt):
     if game_id not in games:
         raise HTTPException(status_code=404, detail="Game not found")
-    if attempt.song_id not in songs:
-        raise HTTPException(status_code=404, detail="Song not found")
+    game = games[game_id]
+    if attempt.song_id not in game.songs:
+        raise HTTPException(status_code=404, detail="Song not found in this game")
     
-    song = songs[attempt.song_id]
+    song = game.songs[attempt.song_id]
     if not song.hidden_line_indices:
         return {"correct": False, "expected": [], "word_results": []}
     
@@ -268,7 +349,7 @@ def attempt_lyrics(game_id: int, attempt: LyricsAttempt):
     if total_words > 0:
         score = int((correct_count / total_words) * 100)
         if score >= 80:  # 80% threshold for points
-            games[game_id].scores[attempt.player] += score // 10
+            game.scores[attempt.player] += score // 10
     
     return {
         "correct": correct_count == total_words,

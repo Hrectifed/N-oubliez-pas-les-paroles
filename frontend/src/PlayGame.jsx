@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getGame, startGame, selectCategory, selectSong, attemptLyrics, getCategories } from './api';
+import { getGame, startGame, selectCategory, selectSong, attemptLyrics, getGameCategories } from './api';
 import SingingMode from './SingingMode';
 
 function PlayGame({ gameId, onBack }) {
@@ -75,7 +75,7 @@ function PlayGame({ gameId, onBack }) {
       {step === 'category' && (
         <div>
           <h3>Choisissez une catégorie</h3>
-          {game.categories.map(cat => (
+          {game.categories && Object.keys(game.categories).filter(cat => !game.played_categories.includes(cat)).map(cat => (
             <button key={cat} onClick={() => handleSelectCategory(cat)} style={{ margin: '5px' }}>
               {cat}
             </button>
