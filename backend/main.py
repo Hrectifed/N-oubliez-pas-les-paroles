@@ -355,7 +355,7 @@ class GameCreate(BaseModel):
     songs: Optional[List[SongCreate]] = []
     categories: Optional[List[str]] = []
 
-@app.post("/games", response_model=Game)
+@app.post("/games")
 def create_game(game: GameCreate):
     global game_counter, song_counter
     game_id = game_counter
@@ -397,7 +397,36 @@ def create_game(game: GameCreate):
         scores={name: 0 for name in game.player_names}
     )
     games[game_id] = game_obj
-    return game_obj
+    
+    # Return properly formatted response
+    categories_dict = {}
+    for name, category in game_obj.categories.items():
+        categories_dict[name] = {
+            "name": category.name,
+            "song_ids": category.song_ids
+        }
+    
+    return {
+        "id": game_obj.id,
+        "name": game_obj.name,
+        "players": [{"username": p.username, "picture_url": p.picture_url} for p in game_obj.players],
+        "songs": {str(k): {
+            "id": v.id,
+            "title": v.title,
+            "category": v.category,
+            "youtube_url": v.youtube_url,
+            "spotify_id": v.spotify_id,
+            "lrc": v.lrc,
+            "lyrics": v.lyrics,
+            "hidden_line_indices": v.hidden_line_indices
+        } for k, v in game_obj.songs.items()},
+        "categories": categories_dict,
+        "played_categories": game_obj.played_categories,
+        "current_round": game_obj.current_round,
+        "current_player": game_obj.current_player,
+        "state": game_obj.state,
+        "scores": game_obj.scores
+    }
 
 # List all games with id, name, and state (for filtering playable games)
 
@@ -410,11 +439,43 @@ class GameSummary(BaseModel):
 def list_games():
     return [GameSummary(id=g.id, name=g.name, state=g.state) for g in games.values()]
 
-@app.get("/games/{game_id}", response_model=Game)
+@app.get("/games/{game_id}")
 def get_game(game_id: int):
     if game_id not in games:
         raise HTTPException(status_code=404, detail="Game not found")
-    return games[game_id]
+    
+    game = games[game_id]
+    
+    # Ensure categories are properly formatted as a dict with string keys
+    categories_dict = {}
+    for name, category in game.categories.items():
+        categories_dict[name] = {
+            "name": category.name,
+            "song_ids": category.song_ids
+        }
+    
+    # Return game data with properly formatted categories
+    return {
+        "id": game.id,
+        "name": game.name,
+        "players": [{"username": p.username, "picture_url": p.picture_url} for p in game.players],
+        "songs": {str(k): {
+            "id": v.id,
+            "title": v.title,
+            "category": v.category,
+            "youtube_url": v.youtube_url,
+            "spotify_id": v.spotify_id,
+            "lrc": v.lrc,
+            "lyrics": v.lyrics,
+            "hidden_line_indices": v.hidden_line_indices
+        } for k, v in game.songs.items()},
+        "categories": categories_dict,
+        "played_categories": game.played_categories,
+        "current_round": game.current_round,
+        "current_player": game.current_player,
+        "state": game.state,
+        "scores": game.scores
+    }
 
 @app.post("/games/{game_id}/start")
 def start_game(game_id: int):

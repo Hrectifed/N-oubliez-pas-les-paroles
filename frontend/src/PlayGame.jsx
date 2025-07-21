@@ -199,21 +199,113 @@ function PlayGame({ gameId, onBack }) {
       {step === 'category' && (
         <div>
           <h3>Choisissez une catégorie</h3>
-          {game.categories && Object.keys(game.categories).filter(cat => !game.played_categories.includes(cat)).map(cat => (
-            <button key={cat} onClick={() => handleSelectCategory(cat)} style={{ margin: '5px' }}>
-              {cat}
-            </button>
-          ))}
+          
+          {game.categories && (() => {
+            // Handle both array and object formats
+            const categoryKeys = Array.isArray(game.categories) 
+              ? game.categories 
+              : Object.keys(game.categories);
+            
+            const availableCategories = categoryKeys.filter(cat => !game.played_categories.includes(cat));
+            
+            if (availableCategories.length === 0) {
+              return (
+                <div style={{ 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#666',
+                  backgroundColor: '#f9f9f9',
+                  borderRadius: '8px',
+                  margin: '20px 0'
+                }}>
+                  Toutes les catégories ont été jouées !
+                </div>
+              );
+            }
+            
+            return availableCategories.map(cat => (
+              <button 
+                key={cat} 
+                onClick={() => handleSelectCategory(cat)} 
+                style={{ 
+                  margin: '8px',
+                  padding: '15px 25px',
+                  backgroundColor: '#2196f3',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  transition: 'background-color 0.2s',
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#1976d2'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#2196f3'}
+              >
+                📂 {cat}
+              </button>
+            ));
+          })()}
         </div>
       )}
       {step === 'song' && (
         <div>
-          <h3>Choisissez une chanson</h3>
-          {songs.map(s => (
-            <button key={s.id} onClick={() => handleSelectSong(s.id)} style={{ margin: '5px', display: 'block' }}>
-              {s.title}
-            </button>
-          ))}
+          <h3>Choisissez une chanson - Catégorie: {category}</h3>
+          
+          {songs.length === 0 ? (
+            <div style={{ 
+              padding: '20px', 
+              textAlign: 'center', 
+              color: '#666',
+              backgroundColor: '#f9f9f9',
+              borderRadius: '8px',
+              margin: '20px 0'
+            }}>
+              Aucune chanson disponible dans cette catégorie.
+              <br />
+              <button 
+                onClick={() => setStep('category')} 
+                style={{ 
+                  marginTop: '10px',
+                  padding: '8px 16px',
+                  backgroundColor: '#666',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Retour aux catégories
+              </button>
+            </div>
+          ) : (
+            songs.map(s => (
+              <button 
+                key={s.id} 
+                onClick={() => handleSelectSong(s.id)} 
+                style={{ 
+                  margin: '8px 0', 
+                  padding: '15px 20px',
+                  backgroundColor: '#4caf50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  width: '100%',
+                  textAlign: 'left',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#45a049'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#4caf50'}
+              >
+                🎵 {s.title}
+              </button>
+            ))
+          )}
         </div>
       )}
       {step === 'sing' && song && (

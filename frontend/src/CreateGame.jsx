@@ -59,8 +59,13 @@ function CreateGame({ onGameCreated }) {
       } else {
         // Add new song locally
         const songId = Date.now(); // temporary ID for local state
-        newSong = { id: songId, ...song };
-        setSongs([...songs, newSong]);
+        // If no category is set, assign to default
+        const songWithCategory = { 
+          id: songId, 
+          ...song, 
+          category: song.category || '' 
+        };
+        setSongs([...songs, songWithCategory]);
       }
       
       setSong({ title: '', category: '', youtube_url: '', spotify_id: '', lrc: '', hidden_line_indices: [] });
@@ -232,6 +237,9 @@ function CreateGame({ onGameCreated }) {
     }
     
     // Create the game with all data
+    const categoriesFromSongs = [...new Set(songs.map(s => s.category || 'Sans catégorie'))];
+    const allCategories = [...new Set([...categories, ...categoriesFromSongs])];
+    
     const gameData = { 
       name: gameName, 
       player_names: filtered.map(p => p.username),
@@ -243,7 +251,7 @@ function CreateGame({ onGameCreated }) {
         lrc: s.lrc,
         hidden_line_indices: s.hidden_line_indices
       })),
-      categories: categories
+      categories: allCategories
     };
     
     try {
