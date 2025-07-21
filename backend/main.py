@@ -63,6 +63,9 @@ class Player(BaseModel):
     username: str
     picture_url: Optional[str] = None
 
+class CategorySelection(BaseModel):
+    category: str
+
 class Game(BaseModel):
     id: int
     name: str
@@ -448,9 +451,6 @@ def next_round(game_id: int):
     game.current_player = random.choice(remaining_players)
     game.current_round += 1
     return {"current_player": game.current_player, "round": game.current_round}
-
-class CategorySelection(BaseModel):
-    category: str
 
 @app.post("/games/{game_id}/select_category")
 def select_category(game_id: int, selection: CategorySelection):

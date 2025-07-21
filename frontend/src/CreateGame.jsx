@@ -37,41 +37,32 @@ function CreateGame({ onGameCreated }) {
       return;
     }
     
-    // Create an initial empty game
-    const initialGame = await createGame({ 
-      name: gameName, 
-      player_names: ['temp'], // We'll update this later
-      songs: [],
-      categories: []
-    });
-    setGameId(initialGame.id);
+    // Just move to next step - we'll create the game at the end
     setStep(2);
     setError('');
   };
 
   // Step 2: Song/Category management
   const handleAddSong = async () => {
-    if (!song.title || !song.category || !song.youtube_url || !song.lrc || song.hidden_line_indices.length === 0) {
-      setError('Tous les champs sont requis et au moins une ligne cachée.');
+    if (!song.title || !song.youtube_url || !song.lrc || song.hidden_line_indices.length === 0) {
+      setError('Titre, URL YouTube, LRC et au moins une ligne cachée sont requis.');
       return;
     }
     
     try {
       let newSong;
       if (editingSong) {
-        // Update existing song
-        newSong = await updateSongInGame(gameId, editingSong.id, song);
-        setSongs(songs.map(s => s.id === editingSong.id ? newSong : s));
+        // Update existing song locally
+        const updatedSong = { ...editingSong, ...song };
+        setSongs(songs.map(s => s.id === editingSong.id ? updatedSong : s));
         setEditingSong(null);
       } else {
-        // Add new song
-        newSong = await addSongToGame(gameId, song);
+        // Add new song locally
+        const songId = Date.now(); // temporary ID for local state
+        newSong = { id: songId, ...song };
         setSongs([...songs, newSong]);
       }
       
-      if (!categories.includes(song.category)) {
-        setCategories([...categories, song.category]);
-      }
       setSong({ title: '', category: '', youtube_url: '', spotify_id: '', lrc: '', hidden_line_indices: [] });
       setLrcLines([]);
       setShowSongForm(false);
@@ -83,30 +74,44 @@ function CreateGame({ onGameCreated }) {
 
   const handleEditSong = (songToEdit) => {
     setEditingSong(songToEdit);
+    // Clear fields first for better editing experience
     setSong({
-      title: songToEdit.title,
-      category: songToEdit.category,
-      youtube_url: songToEdit.youtube_url,
-      spotify_id: songToEdit.spotify_id,
-      lrc: songToEdit.lrc,
-      hidden_line_indices: songToEdit.hidden_line_indices
+      title: '',
+      category: '',
+      youtube_url: '',
+      spotify_id: '',
+      lrc: '',
+      hidden_line_indices: []
     });
-    setLrcLines(songToEdit.lyrics || []);
+    setLrcLines([]);
+    
+    // Set the data after a small delay to allow fields to clear visually
+    setTimeout(() => {
+      setSong({
+        title: songToEdit.title || '',
+        category: songToEdit.category || '',
+        youtube_url: songToEdit.youtube_url || '',
+        spotify_id: songToEdit.spotify_id || '',
+        lrc: songToEdit.lrc || '',
+        hidden_line_indices: songToEdit.hidden_line_indices || []
+      });
+      if (songToEdit.lrc) {
+        try {
+          const parsed = parseLRC(songToEdit.lrc);
+          setLrcLines(parsed);
+        } catch (error) {
+          console.error('Error parsing LRC:', error);
+          setLrcLines([]);
+        }
+      }
+    }, 100);
+    
     setShowSongForm(true);
   };
 
   const handleDeleteSong = async (songId) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette chanson ?')) {
-      try {
-        await deleteSongFromGame(gameId, songId);
-        setSongs(songs.filter(s => s.id !== songId));
-        // Update categories if needed
-        const remainingSongs = songs.filter(s => s.id !== songId);
-        const usedCategories = [...new Set(remainingSongs.map(s => s.category))];
-        setCategories(usedCategories);
-      } catch (error) {
-        setError('Erreur lors de la suppression de la chanson');
-      }
+      setSongs(songs.filter(s => s.id !== songId));
     }
   };
 
@@ -118,8 +123,7 @@ function CreateGame({ onGameCreated }) {
     
     try {
       if (editingCategory) {
-        // Rename existing category
-        await renameCategoryInGame(gameId, editingCategory, newCategoryName);
+        // Rename existing category locally
         setCategories(categories.map(cat => cat === editingCategory ? newCategoryName : cat));
         setSongs(songs.map(song => 
           song.category === editingCategory 
@@ -128,9 +132,10 @@ function CreateGame({ onGameCreated }) {
         ));
         setEditingCategory(null);
       } else {
-        // Add new category
-        await addCategoryToGame(gameId, newCategoryName);
-        setCategories([...categories, newCategoryName]);
+        // Add new category locally
+        if (!categories.includes(newCategoryName)) {
+          setCategories([...categories, newCategoryName]);
+        }
       }
       
       setNewCategoryName('');
@@ -149,13 +154,8 @@ function CreateGame({ onGameCreated }) {
 
   const handleDeleteCategory = async (categoryName) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette catégorie et toutes ses chansons ?')) {
-      try {
-        await deleteCategoryFromGame(gameId, categoryName);
-        setCategories(categories.filter(cat => cat !== categoryName));
-        setSongs(songs.filter(song => song.category !== categoryName));
-      } catch (error) {
-        setError('Erreur lors de la suppression de la catégorie');
-      }
+      setCategories(categories.filter(cat => cat !== categoryName));
+      setSongs(songs.filter(song => song.category !== categoryName));
     }
   };
 
@@ -168,6 +168,28 @@ function CreateGame({ onGameCreated }) {
     } catch (error) {
       console.error('Error parsing LRC:', error);
       setLrcLines([]);
+    }
+  };
+
+  // Auto-fetch LRC from Spotify ID
+  const handleSpotifyIdChange = async (spotifyId) => {
+    setSong(s => ({ ...s, spotify_id: spotifyId }));
+    
+    if (spotifyId.trim() && spotifyId.length > 10) {
+      try {
+        // Try to fetch LRC from lyricsify API
+        const response = await fetch(`http://127.0.0.1:4000/lyrics/${spotifyId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.lrc) {
+            handleLrcChange(data.lrc);
+            setError(''); // Clear any previous errors
+          }
+        }
+      } catch (error) {
+        // Fail silently - the lyricsify service might not be running
+        console.log('Lyricsify service not available:', error);
+      }
     }
   };
 
@@ -209,24 +231,29 @@ function CreateGame({ onGameCreated }) {
       return;
     }
     
-    // Update the game with real players
-    const updatedGame = await createGame({ 
+    // Create the game with all data
+    const gameData = { 
       name: gameName, 
       player_names: filtered.map(p => p.username),
       songs: songs.map(s => ({
         title: s.title,
-        category: s.category,
+        category: s.category || 'Sans catégorie',
         youtube_url: s.youtube_url,
-        spotify_id: s.spotify_id,
+        spotify_id: s.spotify_id || '',
         lrc: s.lrc,
         hidden_line_indices: s.hidden_line_indices
       })),
       categories: categories
-    });
+    };
     
-    setGameId(updatedGame.id);
-    setStep(4);
-    setError('');
+    try {
+      const createdGame = await createGame(gameData);
+      setGameId(createdGame.id);
+      setStep(4);
+      setError('');
+    } catch (error) {
+      setError('Erreur lors de la création de la partie');
+    }
   };
 
   if (step === 1) {
@@ -289,19 +316,30 @@ function CreateGame({ onGameCreated }) {
             </div>
             
             <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              {songs.map(s => (
-                <div key={s.id} style={{ 
-                  border: '1px solid #eee', 
-                  borderRadius: '4px', 
-                  padding: '12px', 
-                  marginBottom: '8px',
-                  backgroundColor: '#f9f9f9',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
+              {songs.filter(s => !s.category).map(s => (
+                <div 
+                  key={s.id} 
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify(s));
+                  }}
+                  style={{ 
+                    border: '1px solid #eee', 
+                    borderRadius: '4px', 
+                    padding: '12px', 
+                    marginBottom: '8px',
+                    backgroundColor: '#f9f9f9',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'grab'
+                  }}
+                  onMouseDown={(e) => e.target.style.cursor = 'grabbing'}
+                  onMouseUp={(e) => e.target.style.cursor = 'grab'}
+                >
                   <div>
-                    <strong>{s.title}</strong> - {s.category}
+                    <strong>{s.title || 'Sans titre'}</strong>
+                    <div style={{ fontSize: '12px', color: '#666' }}>🎵 Glissez dans une catégorie</div>
                   </div>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     <button
@@ -335,6 +373,88 @@ function CreateGame({ onGameCreated }) {
                   </div>
                 </div>
               ))}
+              
+              {/* Show categorized songs in a disabled state */}
+              {songs.filter(s => s.category).map(s => (
+                <div key={s.id} style={{ 
+                  border: '1px solid #ddd', 
+                  borderRadius: '4px', 
+                  padding: '12px', 
+                  marginBottom: '8px',
+                  backgroundColor: '#f5f5f5',
+                  opacity: 0.6,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <strong>{s.title || 'Sans titre'}</strong>
+                    <div style={{ fontSize: '12px', color: '#666' }}>📂 Dans "{s.category}"</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => {
+                        // Remove from category
+                        setSongs(songs.map(song => 
+                          song.id === s.id ? { ...song, category: '' } : song
+                        ));
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#ff9800',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      📤 Retirer
+                    </button>
+                    <button
+                      onClick={() => handleEditSong(s)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#2196f3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      ✏️ Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSong(s.id)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🗑️ Suppr.
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {songs.length === 0 && (
+                <div style={{ 
+                  textAlign: 'center', 
+                  color: '#666',
+                  fontStyle: 'italic',
+                  padding: '40px 20px',
+                  border: '2px dashed #ddd',
+                  borderRadius: '8px'
+                }}>
+                  Aucune chanson ajoutée
+                </div>
+              )}
             </div>
           </div>
 
@@ -361,13 +481,38 @@ function CreateGame({ onGameCreated }) {
               {categories.map(cat => {
                 const categorySongs = songs.filter(s => s.category === cat);
                 return (
-                  <div key={cat} style={{ 
-                    border: '1px solid #eee', 
-                    borderRadius: '4px', 
-                    padding: '12px', 
-                    marginBottom: '8px',
-                    backgroundColor: '#f0f8ff'
-                  }}>
+                  <div 
+                    key={cat} 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.style.backgroundColor = '#e3f2fd';
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f0f8ff';
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.style.backgroundColor = '#f0f8ff';
+                      try {
+                        const songData = JSON.parse(e.dataTransfer.getData('text/plain'));
+                        // Assign song to this category
+                        setSongs(songs.map(song => 
+                          song.id === songData.id ? { ...song, category: cat } : song
+                        ));
+                      } catch (error) {
+                        console.error('Error dropping song:', error);
+                      }
+                    }}
+                    style={{ 
+                      border: '1px solid #eee', 
+                      borderRadius: '4px', 
+                      padding: '12px', 
+                      marginBottom: '8px',
+                      backgroundColor: '#f0f8ff',
+                      minHeight: '60px',
+                      transition: 'background-color 0.2s'
+                    }}
+                  >
                     <div style={{ 
                       display: 'flex', 
                       justifyContent: 'space-between', 
@@ -406,7 +551,8 @@ function CreateGame({ onGameCreated }) {
                         </button>
                       </div>
                     </div>
-                    {categorySongs.length === 0 && (
+                    
+                    {categorySongs.length === 0 ? (
                       <div style={{ 
                         fontStyle: 'italic', 
                         color: '#666', 
@@ -415,12 +561,42 @@ function CreateGame({ onGameCreated }) {
                         padding: '16px',
                         borderRadius: '4px'
                       }}>
-                        Glissez-déposez des chansons ici
+                        🎵 Glissez-déposez des chansons ici
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {categorySongs.map(song => (
+                          <div 
+                            key={song.id}
+                            style={{
+                              padding: '8px',
+                              backgroundColor: '#e8f5e8',
+                              borderRadius: '4px',
+                              fontSize: '14px',
+                              border: '1px solid #c8e6c9'
+                            }}
+                          >
+                            🎵 {song.title}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
                 );
               })}
+              
+              {categories.length === 0 && (
+                <div style={{ 
+                  textAlign: 'center', 
+                  color: '#666',
+                  fontStyle: 'italic',
+                  padding: '40px 20px',
+                  border: '2px dashed #ddd',
+                  borderRadius: '8px'
+                }}>
+                  Aucune catégorie créée
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -466,61 +642,213 @@ function CreateGame({ onGameCreated }) {
               backgroundColor: 'white', 
               padding: '20px', 
               borderRadius: '8px',
-              maxWidth: '600px',
-              width: '90%',
-              maxHeight: '80%',
+              maxWidth: '1000px',
+              width: '95%',
+              maxHeight: '90%',
               overflowY: 'auto'
             }}>
-              <h3>{editingSong ? 'Modifier la chanson' : 'Ajouter une chanson'}</h3>
-              <input 
-                placeholder="Titre" 
-                value={song.title} 
-                onChange={e => setSong({ ...song, title: e.target.value })}
-                style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
-              />
-              <input 
-                placeholder="Catégorie" 
-                value={song.category} 
-                onChange={e => setSong({ ...song, category: e.target.value })}
-                style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
-              />
-              <input 
-                placeholder="URL Youtube" 
-                value={song.youtube_url} 
-                onChange={e => setSong({ ...song, youtube_url: e.target.value })}
-                style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
-              />
-              <input 
-                placeholder="Spotify ID (optionnel)" 
-                value={song.spotify_id} 
-                onChange={e => setSong({ ...song, spotify_id: e.target.value })}
-                style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
-              />
-              <textarea
-                placeholder="Contenu LRC (format: [mm:ss.ff]texte)"
-                value={song.lrc}
-                onChange={e => handleLrcChange(e.target.value)}
-                style={{ 
-                  width: '100%', 
-                  height: '120px', 
-                  padding: '8px', 
-                  marginBottom: '8px',
-                  fontFamily: 'monospace'
-                }}
-              />
+              <h3 style={{ marginBottom: '20px' }}>
+                {editingSong ? 'Modifier la chanson' : 'Ajouter une chanson'}
+              </h3>
               
-              {lrcLines.length > 0 && (
-                <div style={{ marginBottom: '16px' }}>
-                  <h4>Sélectionnez les lignes à cacher :</h4>
-                  <LyricsSelector 
-                    lines={lrcLines} 
-                    selected={song.hidden_line_indices} 
-                    onToggle={handleToggleHidden} 
-                  />
+              {/* Two Column Layout */}
+              <div style={{ display: 'flex', gap: '30px', minHeight: '500px' }}>
+                
+                {/* Left Column - Song Information */}
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ marginBottom: '16px', color: '#2196f3' }}>📝 Informations de la chanson</h4>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Titre *</label>
+                    <input 
+                      placeholder="Titre de la chanson" 
+                      value={song.title} 
+                      onChange={e => setSong({ ...song, title: e.target.value })}
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px', 
+                        border: '2px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>URL YouTube *</label>
+                    <input 
+                      placeholder="https://www.youtube.com/watch?v=..." 
+                      value={song.youtube_url} 
+                      onChange={e => setSong({ ...song, youtube_url: e.target.value })}
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px', 
+                        border: '2px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* YouTube Preview */}
+                  {song.youtube_url && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#e53e3e' }}>🎬 Aperçu vidéo</label>
+                      <div style={{ 
+                        border: '2px solid #ddd', 
+                        borderRadius: '6px', 
+                        overflow: 'hidden',
+                        backgroundColor: '#f5f5f5'
+                      }}>
+                        {(() => {
+                          const videoId = song.youtube_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
+                          return videoId ? (
+                            <iframe
+                              width="100%"
+                              height="200"
+                              src={`https://www.youtube.com/embed/${videoId[1]}`}
+                              title="YouTube video preview"
+                              frameBorder="0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            ></iframe>
+                          ) : (
+                            <div style={{ 
+                              padding: '40px', 
+                              textAlign: 'center', 
+                              color: '#666',
+                              fontStyle: 'italic'
+                            }}>
+                              URL YouTube invalide
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Spotify ID</label>
+                    <input 
+                      placeholder="Spotify ID (optionnel)" 
+                      value={song.spotify_id} 
+                      onChange={e => handleSpotifyIdChange(e.target.value)}
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px', 
+                        border: '2px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                      📡 Les paroles seront récupérées automatiquement depuis l'API lyricsify
+                    </div>
+                  </div>
                 </div>
-              )}
+
+                {/* Right Column - Lyrics Management */}
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ marginBottom: '16px', color: '#2196f3' }}>🎵 Gestion des paroles</h4>
+                  
+                  {/* LRC Input Options */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '10px', 
+                      marginBottom: '10px',
+                      borderBottom: '1px solid #eee',
+                      paddingBottom: '10px'
+                    }}>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: '#4caf50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        onClick={() => document.getElementById('lrc-file-input').click()}
+                      >
+                        📁 Importer fichier LRC
+                      </button>
+                      <input
+                        id="lrc-file-input"
+                        type="file"
+                        accept=".lrc,.txt"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              handleLrcChange(event.target.result);
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      />
+                    </div>
+                    
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Contenu LRC *</label>
+                    <textarea
+                      placeholder="[00:12.50]Ligne de paroles&#10;[00:16.30]Autre ligne"
+                      value={song.lrc}
+                      onChange={e => handleLrcChange(e.target.value)}
+                      style={{ 
+                        width: '100%', 
+                        height: '120px', 
+                        padding: '10px', 
+                        border: '2px solid #ddd',
+                        borderRadius: '6px',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        resize: 'vertical'
+                      }}
+                    />
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                      Format: [mm:ss.ff]texte (ex: [00:12.50]Hello world)
+                    </div>
+                  </div>
+                  
+                  {/* Lyrics Selection */}
+                  {lrcLines.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                        🎯 Lignes à cacher ({song.hidden_line_indices.length} sélectionnées) *
+                      </label>
+                      <div style={{ 
+                        border: '2px solid #ddd', 
+                        borderRadius: '6px',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        backgroundColor: '#fafafa'
+                      }}>
+                        <LyricsSelector 
+                          lines={lrcLines} 
+                          selected={song.hidden_line_indices} 
+                          onToggle={handleToggleHidden} 
+                        />
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                        Cliquez sur les lignes que les joueurs devront deviner
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
               
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                justifyContent: 'flex-end',
+                marginTop: '20px',
+                paddingTop: '20px',
+                borderTop: '1px solid #eee'
+              }}>
                 <button 
                   onClick={() => {
                     setShowSongForm(false);
@@ -528,24 +856,33 @@ function CreateGame({ onGameCreated }) {
                     setSong({ title: '', category: '', youtube_url: '', spotify_id: '', lrc: '', hidden_line_indices: [] });
                     setLrcLines([]);
                   }}
-                  style={{ padding: '8px 16px' }}
+                  style={{ 
+                    padding: '10px 20px',
+                    backgroundColor: '#666',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
                 >
                   Annuler
                 </button>
                 <button 
                   onClick={handleAddSong}
+                  disabled={!song.title || !song.youtube_url || !song.lrc || song.hidden_line_indices.length === 0}
                   style={{ 
-                    padding: '8px 16px',
-                    backgroundColor: '#4caf50',
+                    padding: '10px 20px',
+                    backgroundColor: (!song.title || !song.youtube_url || !song.lrc || song.hidden_line_indices.length === 0) ? '#ccc' : '#4caf50',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '4px'
+                    borderRadius: '6px',
+                    cursor: (!song.title || !song.youtube_url || !song.lrc || song.hidden_line_indices.length === 0) ? 'not-allowed' : 'pointer'
                   }}
                 >
                   {editingSong ? 'Modifier' : 'Ajouter'}
                 </button>
               </div>
-              {error && <div style={{ color: 'red', marginTop: '8px' }}>{error}</div>}
+              {error && <div style={{ color: 'red', marginTop: '10px', padding: '10px', backgroundColor: '#ffebee', borderRadius: '4px' }}>{error}</div>}
             </div>
           </div>
         )}
