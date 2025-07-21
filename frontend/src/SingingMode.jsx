@@ -32,7 +32,21 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     hiddenLines.forEach((line, lineIdx) => {
       if (line && line.text) {
         if (startTime === null) startTime = line.time;
-        endTime = line.time + 5000; // Assume 5 seconds per line if no next line
+        
+        // Calculate end time based on next line or assume 4 seconds per line
+        const nextLineIndex = song.hidden_line_indices[lineIdx + 1];
+        if (nextLineIndex && song.lyrics[nextLineIndex]) {
+          endTime = song.lyrics[nextLineIndex].time;
+        } else {
+          // For the last hidden line, look for the next non-hidden line
+          const currentIndex = song.hidden_line_indices[lineIdx];
+          const nextLyric = song.lyrics[currentIndex + 1];
+          if (nextLyric) {
+            endTime = nextLyric.time;
+          } else {
+            endTime = line.time + 4000; // 4 seconds fallback
+          }
+        }
 
         const words = line.text.match(/\b\w+\b/g) || [];
         words.forEach(word => {
@@ -150,30 +164,53 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
   const renderLyrics = () => {
     if (!song?.lyrics) return <div>Paroles non disponibles</div>;
 
-    return song.lyrics.map((lyric, index) => {
-      const isHidden = song.hidden_line_indices?.includes(index);
-      const isCurrent = index === currentLyricIndex;
-      const isPast = currentTime > lyric.time + 3000; // 3 seconds after line starts
+    // Show only the current line in a single box
+    const currentLyric = song.lyrics[currentLyricIndex];
+    if (!currentLyric) return <div>Paroles non disponibles</div>;
 
-      if (isHidden && showInputs) {
-        return null; // Hidden lines are shown as inputs
-      }
+    const isHidden = song.hidden_line_indices?.includes(currentLyricIndex);
 
+    // If current line is hidden and we're showing inputs, don't show the lyric text
+    if (isHidden && showInputs) {
+      return null; // Hidden lines are shown as inputs instead
+    }
+
+    // If current line is hidden but we're not showing inputs yet, hide it completely
+    if (isHidden) {
       return (
-        <div
-          key={index}
-          style={{
-            padding: '4px 0',
-            backgroundColor: isCurrent ? '#e3f2fd' : 'transparent',
-            fontWeight: isCurrent ? 'bold' : 'normal',
-            opacity: isPast ? 0.6 : 1,
-            color: isHidden ? '#999' : '#000'
-          }}
-        >
-          {lyric.text}
+        <div style={{
+          padding: '20px',
+          textAlign: 'center',
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#000',
+          minHeight: '60px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          ♪ ♪ ♪
         </div>
       );
-    });
+    }
+
+    return (
+      <div style={{
+        padding: '20px',
+        textAlign: 'center',
+        fontSize: '18px',
+        fontWeight: 'bold',
+        color: '#000',
+        minHeight: '60px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#e3f2fd',
+        borderRadius: '8px'
+      }}>
+        {currentLyric.text}
+      </div>
+    );
   };
 
   const renderWordInputs = () => {
@@ -322,10 +359,9 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
         background: '#fafafa', 
         padding: '20px', 
         borderRadius: '8px',
-        maxHeight: '400px',
-        overflowY: 'auto'
+        minHeight: '150px'
       }}>
-        <h3>Paroles</h3>
+        <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Paroles</h3>
         {renderLyrics()}
         {renderWordInputs()}
       </div>
