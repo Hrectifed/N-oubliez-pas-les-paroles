@@ -1,9 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import random
 import re
+import time
+import uuid
 
 
 app = FastAPI()
@@ -78,6 +80,8 @@ class Game(BaseModel):
     players_played_this_round: List[str]  # Track who has played in current round
     state: str  # 'waiting', 'playing', 'finished'
     scores: Dict[str, int]
+    session_id: Optional[str] = None  # Session ID for concurrent play prevention
+    last_activity: Optional[float] = None  # Timestamp of last activity
 
 # In-memory storage
 songs: Dict[int, Song] = {}
@@ -85,6 +89,35 @@ categories: Dict[str, Category] = {}
 games: Dict[int, Game] = {}
 song_counter = 1
 game_counter = 1
+
+# Session management constants
+SESSION_TIMEOUT = 300  # 5 minutes in seconds
+
+# Session management functions
+def generate_session_id() -> str:
+    """Generate a unique session ID"""
+    return str(uuid.uuid4())
+
+def is_session_active(game: Game) -> bool:
+    """Check if a game session is still active"""
+    if not game.session_id or not game.last_activity:
+        return False
+    return time.time() - game.last_activity < SESSION_TIMEOUT
+
+def can_access_game(game: Game, session_id: Optional[str] = None) -> bool:
+    """Check if a session can access a game"""
+    if game.state == 'waiting' or game.state == 'finished':
+        return True
+    if not game.session_id:
+        return True
+    if session_id and game.session_id == session_id:
+        return True
+    return not is_session_active(game)
+
+def update_game_activity(game: Game, session_id: str):
+    """Update game's last activity and session"""
+    game.session_id = session_id
+    game.last_activity = time.time()
 
 # --- Song & Category Management ---
 class SongCreate(BaseModel):
@@ -396,7 +429,9 @@ def create_game(game: GameCreate):
         current_player=None,
         players_played_this_round=[],
         state="waiting",
-        scores={name: 0 for name in game.player_names}
+        scores={name: 0 for name in game.player_names},
+        session_id=None,
+        last_activity=None
     )
     games[game_id] = game_obj
     
@@ -482,18 +517,39 @@ def get_game(game_id: int):
     }
 
 @app.post("/games/{game_id}/start")
-def start_game(game_id: int):
+def start_game(game_id: int, request: Request):
     if game_id not in games:
         raise HTTPException(status_code=404, detail="Game not found")
     game = games[game_id]
-    if game.state != "waiting":
-        raise HTTPException(status_code=400, detail="Game already started or finished")
-    # Pick first player randomly and start round 1
-    game.current_player = random.choice([p.username for p in game.players])
-    game.current_round = 1
-    game.players_played_this_round = []
-    game.state = "playing"
-    return {"current_player": game.current_player, "round": game.current_round}
+    
+    # Get or generate session ID
+    session_id = request.headers.get("X-Session-ID")
+    if not session_id:
+        session_id = generate_session_id()
+    
+    # Check if game can be accessed
+    if game.state == "playing" and not can_access_game(game, session_id):
+        raise HTTPException(status_code=423, detail="Game is currently being played by another session")
+    
+    if game.state == "finished":
+        raise HTTPException(status_code=400, detail="Game is already finished")
+        
+    # Start or resume game
+    if game.state == "waiting":
+        # Pick first player randomly and start round 1
+        game.current_player = random.choice([p.username for p in game.players])
+        game.current_round = 1
+        game.players_played_this_round = []
+        game.state = "playing"
+    
+    # Update session info
+    update_game_activity(game, session_id)
+    
+    return {
+        "current_player": game.current_player, 
+        "round": game.current_round,
+        "session_id": session_id
+    }
 
 @app.post("/games/{game_id}/next_player")
 def next_player(game_id: int):
