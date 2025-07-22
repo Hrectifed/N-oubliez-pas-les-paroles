@@ -14,6 +14,7 @@ A tool to adjust timing in LRC (lyrics) data from exported JSON files from N'oub
 - Allow adjusting timestamps by adding or subtracting seconds and centiseconds
 - Support both positive and negative time adjustments
 - Prevent timestamps from going negative
+- **Automatically updates both LRC strings and parsed lyrics timing data**
 - Save modified files with corrected timing
 
 ## Usage
@@ -46,6 +47,15 @@ The CLI will prompt you for:
 - **Centiseconds**: Integer value (can be negative)
 - Example: +2 seconds and +50 centiseconds = +2s +50cs = +2.50 seconds total
 - Example: -1 second and -25 centiseconds = -1s -25cs = -1.25 seconds total
+
+## Data Format
+
+The tool works with exported JSON files containing game data. For each song, the tool updates both:
+
+1. **LRC field** (`lrc`): Raw LRC format string with timestamps like `[mm:ss.cc]`
+2. **Lyrics field** (`lyrics`): Parsed array of timing objects with millisecond precision
+
+This ensures compatibility with the game's backend that uses both formats.
 
 ## LRC Format
 

@@ -251,6 +251,29 @@ class LRCTimingEditor:
         
         return '\n'.join(adjusted_lines)
     
+    def parse_lrc_to_lyrics(self, lrc_content: str) -> List:
+        """
+        Parse LRC content into array of {time, text} objects (milliseconds)
+        Compatible with backend's parse_lrc function
+        """
+        lines = lrc_content.split('\n')
+        result = []
+        time_exp = re.compile(r'\[(\d+):(\d+)(?:\.(\d+))?\]')
+        
+        for line in lines:
+            match = time_exp.match(line)
+            if match:
+                min_val = int(match.group(1))
+                sec_val = int(match.group(2))
+                # Handle centiseconds (2 digits) by padding to 3 digits for milliseconds
+                cs_val = match.group(3) if match.group(3) else '0'
+                ms_val = int(cs_val.ljust(3, '0')[:3])
+                time_ms = min_val * 60 * 1000 + sec_val * 1000 + ms_val
+                text = time_exp.sub('', line).strip()
+                result.append({"time": time_ms, "text": text})
+        
+        return result
+    
     def apply_changes(self):
         """Apply timing adjustments to all songs"""
         if not self.data:
@@ -280,8 +303,9 @@ class LRCTimingEditor:
                         original_lrc = song['lrc']
                         adjusted_lrc = self.adjust_song_lrc(original_lrc, seconds_adj, centiseconds_adj)
                         
-                        # Update the song data
+                        # Update both lrc and lyrics fields
                         self.data['games'][game_id]['songs'][song_id]['lrc'] = adjusted_lrc
+                        self.data['games'][game_id]['songs'][song_id]['lyrics'] = self.parse_lrc_to_lyrics(adjusted_lrc)
                         changes_made += 1
                         
                 except ValueError:
