@@ -12,6 +12,7 @@ function CreateGame({ onGameCreated }) {
   const [categories, setCategories] = useState([]);
   const [players, setPlayers] = useState([{ username: '', picture_url: '' }]);
   const [error, setError] = useState('');
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   
   // Song form state
   const [song, setSong] = useState({ 
@@ -29,6 +30,69 @@ function CreateGame({ onGameCreated }) {
   const [editingSong, setEditingSong] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingPlayerIndex, setEditingPlayerIndex] = useState(null);
+
+  // Constants for localStorage keys
+  const DRAFT_KEY = 'createGameDraft';
+  
+  // Auto-save game creation draft
+  const saveDraft = () => {
+    if (step > 1 || gameName.trim()) { // Only save if we have started creating
+      const draft = {
+        step,
+        gameName,
+        songs,
+        categories,
+        players,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }
+  };
+
+  // Load draft from localStorage
+  const loadDraft = () => {
+    try {
+      const draftStr = localStorage.getItem(DRAFT_KEY);
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        // Check if draft is not too old (24 hours)
+        if (Date.now() - draft.timestamp < 24 * 60 * 60 * 1000) {
+          return draft;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+    }
+    return null;
+  };
+
+  // Clear draft from localStorage
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+  };
+
+  // Restore draft
+  const restoreDraft = (draft) => {
+    setStep(draft.step);
+    setGameName(draft.gameName);
+    setSongs(draft.songs || []);
+    setCategories(draft.categories || []);
+    setPlayers(draft.players || [{ username: '', picture_url: '' }]);
+    setShowRestoreDialog(false);
+  };
+
+  // Check for existing draft on component mount
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft) {
+      setShowRestoreDialog(true);
+    }
+  }, []);
+
+  // Auto-save whenever key state changes
+  useEffect(() => {
+    saveDraft();
+  }, [step, gameName, songs, categories, players]);
 
   // Step 1: Game name
   const handleGameNameSubmit = async () => {
@@ -259,6 +323,8 @@ function CreateGame({ onGameCreated }) {
       setGameId(createdGame.id);
       setStep(4);
       setError('');
+      // Clear the draft when game is successfully created
+      clearDraft();
     } catch (error) {
       setError('Erreur lors de la création de la partie');
     }
@@ -1146,6 +1212,94 @@ function CreateGame({ onGameCreated }) {
         >
           Jouer maintenant
         </button>
+      </div>
+    );
+  }
+
+  // Restore dialog
+  if (showRestoreDialog) {
+    const draft = loadDraft();
+    return (
+      <div style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0, 
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000
+      }}>
+        <div style={{ 
+          backgroundColor: 'white', 
+          padding: '30px', 
+          borderRadius: '12px',
+          maxWidth: '500px',
+          width: '90%',
+          textAlign: 'center',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+        }}>
+          <h3 style={{ marginBottom: '20px', color: '#2196f3' }}>
+            💾 Brouillon détecté
+          </h3>
+          <p style={{ marginBottom: '20px', color: '#666' }}>
+            Un brouillon de partie en cours de création a été trouvé.<br/>
+            Voulez-vous reprendre où vous vous êtes arrêté ?
+          </p>
+          {draft && (
+            <div style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: '15px', 
+              borderRadius: '8px',
+              marginBottom: '20px',
+              textAlign: 'left'
+            }}>
+              <div><strong>Nom :</strong> {draft.gameName || '(pas encore défini)'}</div>
+              <div><strong>Étape :</strong> {
+                draft.step === 1 ? 'Nom de la partie' :
+                draft.step === 2 ? 'Chansons et catégories' :
+                draft.step === 3 ? 'Joueurs' : 'Terminé'
+              }</div>
+              <div><strong>Chansons :</strong> {draft.songs?.length || 0}</div>
+              <div><strong>Joueurs :</strong> {draft.players?.filter(p => p.username.trim()).length || 0}</div>
+              <div><strong>Sauvegardé :</strong> {new Date(draft.timestamp).toLocaleString()}</div>
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <button 
+              onClick={() => {
+                clearDraft();
+                setShowRestoreDialog(false);
+              }}
+              style={{ 
+                padding: '12px 20px',
+                backgroundColor: '#666',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              🗑️ Nouveau départ
+            </button>
+            <button 
+              onClick={() => draft && restoreDraft(draft)}
+              style={{ 
+                padding: '12px 20px',
+                backgroundColor: '#4caf50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              📂 Reprendre
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

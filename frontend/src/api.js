@@ -1,5 +1,31 @@
 const API_URL = 'http://localhost:8000';
 
+// Session management
+let sessionId = null;
+
+function getSessionId() {
+  if (!sessionId) {
+    sessionId = localStorage.getItem('gameSessionId');
+    if (!sessionId) {
+      sessionId = generateSessionId();
+      localStorage.setItem('gameSessionId', sessionId);
+    }
+  }
+  return sessionId;
+}
+
+function generateSessionId() {
+  return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+}
+
+function getHeaders(extraHeaders = {}) {
+  return {
+    'Content-Type': 'application/json',
+    'X-Session-ID': getSessionId(),
+    ...extraHeaders
+  };
+}
+
 export async function getGame(gameId) {
   const res = await fetch(`${API_URL}/games/${gameId}`);
   return res.json();
@@ -23,21 +49,28 @@ export async function getSongsByCategory(category) {
 export async function createGame(gameData) {
   const res = await fetch(`${API_URL}/games`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(gameData)
   });
   return res.json();
 }
 
 export async function startGame(gameId) {
-  const res = await fetch(`${API_URL}/games/${gameId}/start`, { method: 'POST' });
+  const res = await fetch(`${API_URL}/games/${gameId}/start`, { 
+    method: 'POST',
+    headers: getHeaders()
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || 'Failed to start game');
+  }
   return res.json();
 }
 
 export async function selectCategory(gameId, category) {
   const res = await fetch(`${API_URL}/games/${gameId}/select_category`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ category })
   });
   return res.json();
@@ -46,7 +79,7 @@ export async function selectCategory(gameId, category) {
 export async function selectSong(gameId, songId) {
   const res = await fetch(`${API_URL}/games/${gameId}/select_song`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ song_id: songId })
   });
   return res.json();
@@ -55,7 +88,7 @@ export async function selectSong(gameId, songId) {
 export async function attemptLyrics(gameId, songId, wordAttempts, player) {
   const res = await fetch(`${API_URL}/games/${gameId}/attempt_lyrics`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ song_id: songId, attempt: wordAttempts, player })
   });
   return res.json();
