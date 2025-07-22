@@ -33,9 +33,10 @@ body {
 
 /* Modern Button Styles */
 button {
+  font-family: inherit;
   cursor: pointer;
   transition: var(--transition);
-  color: var(--text-primary);
+  color: var(--Text-color-Base);
   display: flex;
   padding: 24px;
   justify-content: center;
@@ -104,7 +105,7 @@ input, textarea, select {
   gap: 10px;
   border-radius: 16px;
   border: 1px solid var(--Stroke-Stroke, rgba(255, 255, 255, 0.80));
-  background: #fff;
+  background: #615a5a;
 }
 
 input:focus, textarea:focus, select:focus {
@@ -131,7 +132,18 @@ input::placeholder, textarea::placeholder {
     gap: 32px;
 }
 
-
+.lyrics-container {
+  width: 100%;
+  transition: var(--transition);
+  display: flex;
+  padding: 24px;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--Stroke-Stroke, rgba(255, 255, 255, 0.80));
+  background: var(--Main-BG);
+}
 
 
 
@@ -198,8 +210,20 @@ h3 {
 }
 
 .little-container {
-  max-width: 500px;
+  width: 100%;
+  max-width: 400px;
   margin: auto auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+}
+
+.center-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
 }
 
 .text-center {
@@ -295,7 +319,7 @@ h3 {
   }
 }
 
-/* Responsive Design */
+/* Responsive Design *//*
 @media (max-width: 768px) {
   .container {
     padding: 16px;
@@ -318,3 +342,4 @@ h3 {
     padding: 10px 14px;
   }
 }
+*/

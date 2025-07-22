@@ -266,9 +266,9 @@ function CreateGame({ onGameCreated }) {
 
   if (step === 1) {
     return (
-      <div className="little-container">
-          <div className="card-body">
-            <h3 className="mb-3">Nom de la partie</h3>
+      <div className='center-container'>
+        <div className="little-container">
+            <h3 className="text-primary">Nouvelle partie</h3>
             <input 
               placeholder="Entrez le nom de la partie" 
               value={gameName} 
@@ -276,7 +276,7 @@ function CreateGame({ onGameCreated }) {
             />
             <button onClick={handleGameNameSubmit} className="btn-primary w-full">Suivant</button>
             {error && <div style={{ color: 'var(--Text-color-Wrong)', marginTop: '16px', padding: '12px'}}>{error}</div>}
-          </div>
+        </div>
       </div>
     );
   }

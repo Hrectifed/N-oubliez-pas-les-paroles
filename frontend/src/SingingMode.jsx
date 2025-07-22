@@ -184,16 +184,12 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     // If current line is hidden but we're not showing inputs yet, hide it completely
     if (isHidden) {
       return (
-        <div style={{
-          padding: '20px',
+        <div className='lyrics-container' style={{
           textAlign: 'center',
-          fontSize: '18px',
-          fontWeight: 'bold',
-          color: '#000',
-          minHeight: '60px',
+          color: 'var(--text-primary)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
         }}>
           ♪ ♪ ♪
         </div>
@@ -203,18 +199,12 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     // Hide lyrics that come after when showing results to prevent spoilers
     if (showResults && showInputs) {
       return (
-        <div style={{
-          padding: '20px',
+        <div className='lyrics-container' style={{
           textAlign: 'center',
-          fontSize: '18px',
-          fontWeight: 'bold',
-          color: '#666',
-          minHeight: '60px',
+          color: 'var(--text-primary)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#f0f0f0',
-          borderRadius: '8px'
         }}>
           <i>Paroles masquées pendant la validation...</i>
         </div>
@@ -222,18 +212,12 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     }
 
     return (
-      <div style={{
-        padding: '20px',
+      <div className='lyrics-container' style={{
         textAlign: 'center',
-        fontSize: '18px',
-        fontWeight: 'bold',
-        color: '#000',
-        minHeight: '60px',
+        color: 'var(--text-primary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#e3f2fd',
-        borderRadius: '8px'
       }}>
         {currentLyric.text}
       </div>
@@ -244,111 +228,63 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     if (!showInputs) return null;
 
     return (
-      <div style={{ 
-        background: 'rgba(245, 245, 245, 0.95)', 
-        padding: '20px', 
-        borderRadius: '8px', 
-        margin: '20px 0',
-        position: 'relative',
-        zIndex: 10
+      <div className='lyrics-container' style={{ 
+          textAlign: 'center',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
       }}>
-        <h4>Complétez les paroles :</h4>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-          {hiddenWordsInput.map((word, index) => (
-            <input
+        {hiddenWordsInput.map((word, index) => (
+          <input
+            key={index}
+            id={`word-input-${index}`}
+            type="text"
+            value={word}
+            onChange={(e) => handleWordInputChange(index, e.target.value)}
+            onKeyPress={(e) => handleKeyPress(e, index)}
+            style={{
+              width: `${Math.max(80, (inputResults[index]?.word.length || 4) * 12)}px`,
+              textAlign: 'center',
+              color: showResults 
+                ? (inputResults[index]?.correct ? 'var(--Text-color-Validate)' : 'var(--Text-color-Wrong)')
+                : 'var(--Text-color-Player)',
+            }}
+            placeholder="___"
+            autoComplete="off"
+            disabled={showResults}
+          />
+        ))}
+        {showResults && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {inputResults.map((result, index) => (
+            <span
               key={index}
-              id={`word-input-${index}`}
-              type="text"
-              value={word}
-              onChange={(e) => handleWordInputChange(index, e.target.value)}
-              onKeyPress={(e) => handleKeyPress(e, index)}
               style={{
-                width: `${Math.max(80, (inputResults[index]?.word.length || 4) * 12)}px`,
-                padding: '10px',
-                border: showResults 
-                  ? `3px solid ${inputResults[index]?.correct ? '#4caf50' : '#f44336'}`
-                  : '2px solid #ddd',
-                borderRadius: '6px',
-                fontSize: '16px',
-                textAlign: 'center',
-                backgroundColor: showResults 
-                  ? (inputResults[index]?.correct ? '#c8e6c9' : '#ffcdd2')
-                  : 'white',
-                fontWeight: showResults ? 'bold' : 'normal'
+                color: result.correct ? 'var(--Text-color-Validate)' : 'var(--Text-color-Wrong)',
               }}
-              placeholder="___"
-              autoComplete="off"
-              disabled={showResults}
-            />
+            >
+              {result.word}
+            </span>
           ))}
         </div>
-        
-        {showResults && (
-          <div style={{ 
-            marginBottom: '16px',
-            padding: '12px',
-            backgroundColor: '#fff',
-            borderRadius: '6px',
-            border: '2px solid #e0e0e0'
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              marginBottom: '8px',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}>
-              {inputResults.every(r => r.correct) ? (
-                <span style={{ color: '#4caf50' }}>🎉 Parfait ! Toutes les réponses sont correctes !</span>
-              ) : (
-                <span style={{ color: '#f44336' }}>❌ Quelques erreurs... Voici les bonnes réponses :</span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {inputResults.map((result, index) => (
-                <span
-                  key={index}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '4px',
-                    backgroundColor: result.correct ? '#4caf50' : '#f44336',
-                    color: 'white',
-                    fontSize: '14px',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {result.word}
-                </span>
-              ))}
-            </div>
-            <div style={{ 
-              marginTop: '8px', 
-              fontSize: '12px', 
-              color: '#666',
-              fontStyle: 'italic'
-            }}>
-              Les résultats disparaîtront automatiquement...
-            </div>
-          </div>
         )}
-
         {!showResults && (
-          <button
-            onClick={submitAttempt}
-            disabled={hiddenWordsInput.some(word => !word.trim())}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: hiddenWordsInput.some(word => !word.trim()) ? '#ccc' : '#4caf50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: hiddenWordsInput.some(word => !word.trim()) ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}
-          >
-            Valider les réponses
-          </button>
+        <button
+          onClick={submitAttempt}
+          disabled={hiddenWordsInput.some(word => !word.trim())}
+          style={{
+            margin: '8px',
+            height: '100%',
+            backgroundColor: hiddenWordsInput.some(word => !word.trim()) ? '#7c7c7cff' : '#272727ff',
+            color: 'var(--Text-color-Primary)',
+            border: 'var(--Stroke-Stroke, rgba(255, 255, 255, 1))',
+            borderRadius: '8px',
+            cursor: hiddenWordsInput.some(word => !word.trim()) ? 'not-allowed' : 'pointer',
+          }}
+        >
+          Valider
+        </button>
         )}
       </div>
     );
@@ -357,13 +293,7 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
   const youtubeId = getYouTubeId(song?.youtube_url || '');
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>{song?.title}</h2>
-        <button onClick={onBack} style={{ padding: '8px 16px' }}>
-          Retour
-        </button>
-      </div>
+    <div style={{ maxWidth: '100vw', margin: '0 0', padding: '32px' }}>
 
       {youtubeId ? (
         <div style={{ marginBottom: '20px' }}>
@@ -373,7 +303,7 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
             onStateChange={onPlayerStateChange}
             opts={{
               width: '100%',
-              height: '315',
+              height: '80vh',
               playerVars: {
                 controls: 0,
                 disablekb: 1,
@@ -390,6 +320,8 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
       ) : (
         <div style={{ 
           background: '#ffebee', 
+          width: '100%',
+          height: '80vh',
           padding: '20px', 
           borderRadius: '8px', 
           marginBottom: '20px',
@@ -400,13 +332,14 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
         </div>
       )}
 
-      <div style={{ 
-        background: '#fafafa', 
-        padding: '20px', 
-        borderRadius: '8px',
-        minHeight: '150px'
+      <div className='lyrics-container' style={{ 
+        position: 'absolute',
+        width: 'calc(100% - 80px)',
+        laft : '40px',
+        right: '40px',
+        bottom: '40px',
       }}>
-        <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Paroles</h3>
+        <h3 style={{ textAlign: 'center'}}>Paroles</h3>
         {renderLyrics()}
         {renderWordInputs()}
       </div>
