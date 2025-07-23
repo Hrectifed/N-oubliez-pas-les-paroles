@@ -115,6 +115,10 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
     setIsPlaying(isCurrentlyPlaying);
   };
 
+  const onPlayerError = (event) => {
+    console.error("YouTube Player Error:", event);
+  };
+
   const handleWordInputChange = (index, value) => {
     const newInputs = [...hiddenWordsInput];
     newInputs[index] = value;
@@ -371,6 +375,7 @@ function SingingMode({ song, onAttemptSubmit, onBack }) {
             videoId={youtubeId}
             onReady={onPlayerReady}
             onStateChange={onPlayerStateChange}
+            onError={onPlayerError}
             opts={{
               width: '100%',
               height: '315',
